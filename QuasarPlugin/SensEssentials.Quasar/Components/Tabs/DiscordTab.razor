@@ -1,0 +1,117 @@
+<section class="quasar-panel se-section">
+    <div class="quasar-form-section">
+        <h2>Discord Logging</h2>
+        <div class="se-form se-form-row">
+            <label class="quasar-check">
+                <input type="checkbox" @bind="Values.DiscordLoggingEnabled" /> Post log entries to Discord
+            </label>
+            <label class="quasar-field se-narrow">
+                Rate limit (entries per second, 1 - 5)
+                <input type="number" min="1" max="5" @bind="Values.DiscordRateLimitPerSecond" />
+            </label>
+            <label class="quasar-field se-narrow">
+                Attach stack traces longer than (characters)
+                <input type="number" min="0" max="2500" @bind="Values.DiscordStackTraceEmbedLimit" />
+            </label>
+        </div>
+        <p class="se-hint">On Magnetar, Discord Logging sees the logs of Magnetar plugins only.</p>
+    </div>
+</section>
+
+<div class="se-split">
+    <ItemList TItem="DiscordHandlerValues" Items="Values.DiscordLogHandlers" @bind-Selected="_selected"
+              Label="h => h.Name" Problem="h => h.Problem()"
+              Create="Create"
+              AddText="Add handler" EmptyText="No handlers yet." />
+
+    @if (_selected == null)
+    {
+        <p class="se-hint se-empty-detail">Select a handler, or add one. Each handler sends the entries it wants to one Discord channel.</p>
+    }
+    else
+    {
+        var h = _selected;
+        <div class="se-detail">
+            @if (h.Problem() is { } problem)
+            {
+                <div class="quasar-notice quasar-notice-error">⚠ @problem</div>
+            }
+            <section class="quasar-panel se-section">
+                <div class="quasar-form-section">
+                    <h2>Handler</h2>
+                    <div class="se-form">
+                        <label class="quasar-field">
+                            Name
+                            <input @bind="h.Name" @bind:event="oninput" />
+                        </label>
+                        <label class="quasar-check">
+                            <input type="checkbox" @bind="h.Enabled" /> Enabled
+                        </label>
+                        <label class="quasar-field">
+                            Webhook URL
+                            <input @bind="h.WebhookUrl" placeholder="https://discord.com/api/webhooks/..." autocomplete="off" />
+                            <small>In Discord: channel settings, Integrations, Webhooks, New Webhook, Copy Webhook URL. Keep it private.</small>
+                        </label>
+                        <div class="se-form-row">
+                            <label class="quasar-field se-narrow">
+                                Min level
+                                <EnumSelect TEnum="DiscordLogLevel" @bind-Value="h.MinLevel" />
+                            </label>
+                            <label class="quasar-field se-narrow">
+                                Max level
+                                <EnumSelect TEnum="DiscordLogLevel" @bind-Value="h.MaxLevel" />
+                            </label>
+                        </div>
+                        <p class="se-hint">Warn to Fatal is a good start; Info and below are very busy.</p>
+                        <label class="quasar-check">
+                            <input type="checkbox" @bind="h.OnlyWhenServerOnline" /> Only send while a world is loaded
+                        </label>
+                    </div>
+                </div>
+                <div class="quasar-form-section">
+                    <h2>Loggers</h2>
+                    <div class="se-form">
+                        <label class="quasar-field">
+                            Only these loggers
+                            <input @bind="h.LoggerNames" />
+                            <small>Comma separated. End a name with * to match by prefix. Empty sends every logger.</small>
+                        </label>
+                        <label class="quasar-field">
+                            Never these loggers
+                            <input @bind="h.IgnoredLoggerNames" />
+                        </label>
+                    </div>
+                </div>
+                <div class="quasar-form-section">
+                    <h2>Pings</h2>
+                    <div class="se-form">
+                        <label class="quasar-field">
+                            Role IDs
+                            <input @bind="h.RolePings" />
+                        </label>
+                        <label class="quasar-field">
+                            User IDs
+                            <input @bind="h.UserPings" />
+                            <small>Comma separated. They are pinged with every entry this handler sends, so use a separate handler for
+                                pings, for example Error and Fatal with pings and Warn without.</small>
+                        </label>
+                    </div>
+                </div>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SharedConfigValues Values { get; set; } = null!;
+
+    private DiscordHandlerValues? _selected;
+
+    private static DiscordHandlerValues Create() => new() { Name = "Errors" };
+
+    protected override void OnParametersSet()
+    {
+        if (_selected != null && !Values.DiscordLogHandlers.Contains(_selected))
+            _selected = null;
+    }
+}

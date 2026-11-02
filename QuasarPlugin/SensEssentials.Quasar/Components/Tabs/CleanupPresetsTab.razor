@@ -1,0 +1,109 @@
+<div class="se-split">
+    <ItemList TItem="CleanupPresetValues" Items="Values.CleanupPresets" @bind-Selected="_selected"
+              Label="p => p.Name" Problem="p => p.Problem()"
+              Create="Create"
+              AddText="Add cleanup preset" EmptyText="No cleanup presets yet." />
+
+    @if (_selected == null)
+    {
+        <p class="se-hint se-empty-detail">Select a cleanup preset, or add one.</p>
+    }
+    else
+    {
+        var p = _selected;
+        var floating = p.Action == CleanupAction.DeleteFloatingObjects;
+        <div class="se-detail">
+            @if (p.Problem() is { } problem)
+            {
+                <div class="quasar-notice quasar-notice-error">⚠ @problem A preset marked ⚠ is refused when run.</div>
+            }
+            <section class="quasar-panel se-section">
+                <div class="quasar-form-section">
+                    <h2>Preset</h2>
+                    <div class="se-form">
+                        <label class="quasar-field">
+                            Name
+                            <input @bind="p.Name" @bind:event="oninput" />
+                            <small>Run it with !admin runcleanup "@(string.IsNullOrWhiteSpace(p.Name) ? "<name>" : p.Name)", or as an auto command step.</small>
+                        </label>
+                        <label class="quasar-field se-narrow">
+                            Action
+                            <EnumSelect TEnum="CleanupAction" @bind-Value="p.Action" />
+                        </label>
+                        @if (floating)
+                        {
+                            <p class="se-hint">Delete Floating Objects removes loose items floating in space (dropped items, debris). It needs no
+                                targets or conditions.</p>
+                        }
+                        else
+                        {
+                            <label class="quasar-check">
+                                <input type="checkbox" @bind="p.ApplyToAll" /> Apply To All
+                            </label>
+                            <p class="se-hint">Apply To All runs once with only the conditions below, instead of once per target. Use it for
+                                broad rules like "owned by nobody and far from players".</p>
+                        }
+                    </div>
+                </div>
+            </section>
+
+            @if (!floating)
+            {
+                @if (!p.ApplyToAll)
+                {
+                    <section class="quasar-panel se-section">
+                        <div class="quasar-form-section">
+                            <h2>Targets</h2>
+                            <p class="se-hint">What you are looking for, for example grids named "Container MK" or grids owned by nobody.
+                                Each target runs as its own !cleanup delete with the conditions below added.</p>
+                            <ConditionRows TCondition="CleanupTargetValues" TType="CleanupConditionType" Items="p.Targets"
+                                           Create="() => new CleanupTargetValues()" AddText="Add Target" ItemName="target" EmptyText="No targets yet."
+                                           ConditionOf="t => t.Condition" SetCondition="(t, c) => t.Condition = c"
+                                           ParameterOf="t => t.Parameter" SetParameter="(t, v) => t.Parameter = v"
+                                           DelayOf="t => t.Delay" SetDelay="(t, d) => t.Delay = d"
+                                           RequiresParameter="c => c.RequiresParameter()" />
+                        </div>
+                    </section>
+                }
+
+                <section class="quasar-panel se-section">
+                    <div class="quasar-form-section">
+                        <h2>Conditions</h2>
+                        <p class="se-hint">Shared filters added to every target, for example no power, or far from players. If a condition is
+                            unknown, is missing its parameter or its parameter cannot be read, nothing is deleted and the reason is shown.</p>
+                        <ConditionRows TCondition="CleanupConditionValues" TType="CleanupConditionType" Items="p.Conditions"
+                                       Create="() => new CleanupConditionValues()"
+                                       ConditionOf="c => c.Condition" SetCondition="(c, t) => c.Condition = t"
+                                       ParameterOf="c => c.Parameter" SetParameter="(c, v) => c.Parameter = v"
+                                       RequiresParameter="t => t.RequiresParameter()" />
+                    </div>
+                </section>
+
+                <details class="quasar-panel se-section se-details">
+                    <summary>Name patterns and attached grids</summary>
+                    <div class="quasar-form-section">
+                        <p class="se-hint">The Name condition takes a pattern (regex): Container MK matches any name containing it;
+                            ^Static Grid [0-9]+$, ^Large Grid [0-9]+$ and ^Small Grid [0-9]+$ match the game's default names.</p>
+                        <p class="se-hint">A ship and everything attached by rotors, hinges and pistons is checked and deleted together. The
+                            name and grid type are checked on the largest grid, block and PCU counts are totals, the owner is whoever owns
+                            the most blocks, "has" conditions match when any part has it and "no" conditions only when no part has it.</p>
+                    </div>
+                </details>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SharedConfigValues Values { get; set; } = null!;
+
+    private CleanupPresetValues? _selected;
+
+    private static CleanupPresetValues Create() => new() { Name = "New cleanup preset" };
+
+    protected override void OnParametersSet()
+    {
+        if (_selected != null && !Values.CleanupPresets.Contains(_selected))
+            _selected = null;
+    }
+}

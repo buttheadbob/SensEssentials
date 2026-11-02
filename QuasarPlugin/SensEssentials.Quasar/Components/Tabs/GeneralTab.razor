@@ -1,0 +1,30 @@
+<section class="quasar-panel se-section">
+    <div class="quasar-form-section">
+        <h2>Server Settings</h2>
+        <div class="se-form">
+            <label class="quasar-check" title="Stop all entities in the world when the server starts.">
+                <input type="checkbox" @bind="Values.StopShipsOnStart" /> Stop entities on start
+            </label>
+            <label class="quasar-check" title="Show users the position of all grids they own in the grids list command.">
+                <input type="checkbox" @bind="Values.UtilityShowPosition" /> Grid list show position
+            </label>
+            <label class="quasar-check" title="Show users the position of all grids they own by GPS marker.">
+                <input type="checkbox" @bind="Values.MarkerShowPosition" /> Grid list GPS marker
+            </label>
+            <label class="quasar-field se-narrow">
+                Backpack limit
+                <input type="number" min="-1" max="1000" @bind="Values.BackpackLimit" />
+                <small>Backpacks (dropped inventories) each player may have. Empty ones are deleted after 30 seconds. -1 for no limit.</small>
+            </label>
+            <label class="quasar-check" title="Cuts mods and block limits from matchmaking server info.">
+                <input type="checkbox" @bind="Values.CutGameTags" /> Cut game tags
+            </label>
+            <p class="se-hint">Cut game tags removes mods and block limits from the server browser info, which avoids
+                "error downloading session settings". The server needs a restart for it to change.</p>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public SharedConfigValues Values { get; set; } = null!;
+}

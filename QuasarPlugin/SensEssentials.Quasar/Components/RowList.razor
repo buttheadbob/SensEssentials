@@ -1,0 +1,78 @@
+@typeparam TItem where TItem : class
+@* A table of small rows (steps, items, targets, conditions) edited in place, with ▲ ▼ to reorder. *@
+
+<div class="se-rows">
+    @if (Items.Count == 0)
+    {
+        <p class="se-hint">@EmptyText</p>
+    }
+    else
+    {
+        <table class="se-row-table">
+            <thead>
+                <tr>
+                    @Header
+                    <th class="se-row-buttons-cell"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Items)
+                {
+                    <tr @key="item">
+                        @Row(item)
+                        <td class="se-row-buttons-cell">
+                            <span class="se-row-buttons">
+                                <button type="button" class="se-small-button" title="Move up" aria-label="Move up" @onclick="() => Move(item, -1)">▲</button>
+                                <button type="button" class="se-small-button" title="Move down" aria-label="Move down" @onclick="() => Move(item, 1)">▼</button>
+                                <button type="button" class="se-small-button se-remove" title="Remove" aria-label="Remove" @onclick="() => Remove(item)">✕</button>
+                            </span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    <button type="button" class="quasar-button" @onclick="Add">+ @AddText</button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<TItem> Items { get; set; } = null!;
+    [Parameter, EditorRequired] public Func<TItem> Create { get; set; } = null!;
+
+    /// <summary>The header cells (th) of the columns.</summary>
+    [Parameter, EditorRequired] public RenderFragment Header { get; set; } = null!;
+
+    /// <summary>The cells (td) of one row.</summary>
+    [Parameter, EditorRequired] public RenderFragment<TItem> Row { get; set; } = null!;
+
+    [Parameter] public string AddText { get; set; } = "Add";
+    [Parameter] public string EmptyText { get; set; } = "None yet.";
+    [Parameter] public string ItemName { get; set; } = "row";
+
+    [CascadingParameter] public EditorSession? Session { get; set; }
+
+    private void Add()
+    {
+        Items.Add(Create());
+        Session?.Edited();
+    }
+
+    private void Move(TItem item, int direction)
+    {
+        var index = Items.IndexOf(item);
+        var other = index + direction;
+        if (index < 0 || other < 0 || other >= Items.Count)
+            return;
+        (Items[index], Items[other]) = (Items[other], Items[index]);
+        Session?.Edited();
+    }
+
+    private void Remove(TItem item)
+    {
+        var index = Items.IndexOf(item);
+        if (index < 0)
+            return;
+        Items.RemoveAt(index);
+        Session?.Removed($"Removed a {ItemName}.", () => Items.Insert(Math.Min(index, Items.Count), item));
+    }
+}

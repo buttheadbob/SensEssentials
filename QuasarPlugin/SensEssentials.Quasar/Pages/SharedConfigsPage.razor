@@ -1,0 +1,418 @@
+@page "/sens-essentials"
+@attribute [Authorize(Policy = QuasarPolicyNames.CanEditConfigs)]
+@implements IDisposable
+@inject SharedConfigStore Store
+@inject SharedConfigSync Sync
+@inject IJSRuntime JS
+
+<PageTitle>Sens Essentials</PageTitle>
+<NavigationLock OnBeforeInternalNavigation="ConfirmLeaveAsync" ConfirmExternalNavigation="@IsDirty" />
+
+<header class="quasar-page-heading">
+    <div class="quasar-page-intro">
+        <div class="quasar-eyebrow">Plugins</div>
+        <h1>Sens Essentials</h1>
+        <div class="quasar-page-description">Shared Sens Essentials configs: edit once, and every server following a config gets it.</div>
+    </div>
+</header>
+
+<div class="se-page">
+    <aside class="quasar-panel se-sidebar" aria-labelledby="se-configs-heading">
+        <div>
+            <h2 id="se-configs-heading" class="se-sidebar-heading">Shared configs</h2>
+            <p class="se-hint">Settings that Quasar keeps applied on the servers following them.</p>
+        </div>
+
+        <form class="se-sidebar-form" @onsubmit="CreateAsync" @onsubmit:preventDefault>
+            <label class="quasar-field">
+                New config name
+                <input @bind="_newName" @bind:event="oninput" />
+            </label>
+            <div class="se-button-row">
+                <button type="submit" class="quasar-button quasar-button-primary" disabled="@string.IsNullOrWhiteSpace(_newName)">Create</button>
+                <button type="button" class="quasar-button" @onclick="() => _showImport = !_showImport">New from server</button>
+            </div>
+        </form>
+
+        @if (_showImport)
+        {
+            var servers = Sync.GetServers().Where(s => s.Online && !s.IsCluster && s.Status?.Installed == true).ToList();
+            <div class="se-sidebar-form">
+                @if (servers.Count == 0)
+                {
+                    <p class="se-hint">No connected server runs Sens Essentials right now.</p>
+                }
+                else
+                {
+                    <label class="quasar-field">
+                        Copy the settings of
+                        <select @bind="_importServerId">
+                            <option value="">Choose a server</option>
+                            @foreach (var server in servers)
+                            {
+                                <option value="@server.ServerId">@server.DisplayName</option>
+                            }
+                        </select>
+                    </label>
+                    <button type="button" class="quasar-button" disabled="@(string.IsNullOrWhiteSpace(_newName) || string.IsNullOrEmpty(_importServerId) || _busy)"
+                            @onclick="ImportAsync">Create from server</button>
+                    <p class="se-hint">Uses the name above. The server keeps being configured on its own until you assign it.</p>
+                }
+            </div>
+        }
+
+        @{ var configs = Store.GetConfigs(); var assignments = Store.GetAssignments(); }
+        <ul class="se-config-list" aria-label="Shared configs">
+            <li class="se-config-tile">
+                <button type="button" class="se-config-button" aria-pressed="@(_config == null ? "true" : "false")" @onclick="() => SelectAsync(null)">
+                    <span class="se-config-name">All servers</span>
+                    <span class="se-hint">Which config each server follows</span>
+                </button>
+            </li>
+            @foreach (var config in configs)
+            {
+                var count = assignments.Values.Count(a => a.ConfigId == config.Id);
+                <li class="se-config-tile" @key="config.Id">
+                    <button type="button" class="se-config-button" aria-pressed="@(_config?.Id == config.Id ? "true" : "false")"
+                            @onclick="() => SelectAsync(config.Id)">
+                        <span class="se-config-name">@config.Name</span>
+                        <span class="se-hint">@(count == 1 ? "1 server" : $"{count} servers"), revision @config.Revision</span>
+                    </button>
+                    <span class="se-row-buttons">
+                        <button type="button" class="se-small-button" title="@($"Copy {config.Name}")" aria-label="@($"Copy {config.Name}")"
+                                @onclick="() => CopyAsync(config)">⧉</button>
+                        <button type="button" class="se-small-button se-remove" title="@($"Delete {config.Name}")" aria-label="@($"Delete {config.Name}")"
+                                @onclick="() => DeleteAsync(config)">✕</button>
+                    </span>
+                </li>
+            }
+        </ul>
+    </aside>
+
+    <div class="se-main">
+        @if (Store.LoadError != null)
+        {
+            <div class="quasar-notice quasar-notice-error">@Store.LoadError</div>
+        }
+        @if (_error != null)
+        {
+            <div class="quasar-notice quasar-notice-error">@_error</div>
+        }
+
+        @if (_config == null || _draft == null)
+        {
+            <ServersPanel />
+        }
+        else
+        {
+            <section class="quasar-panel se-section">
+                <div class="quasar-form-section se-editor-heading">
+                    <label class="quasar-field se-config-title">
+                        Config name
+                        <input value="@_config.Name" @onchange="Rename" aria-label="Config name" />
+                    </label>
+                    <div class="se-editor-meta">
+                        <span class="se-hint">Revision @_config.Revision, saved @_config.UpdatedUtc.ToLocalTime().ToString("g")</span>
+                        <div class="se-button-row">
+                            <button type="button" class="quasar-button" disabled="@(!IsDirty)" @onclick="Discard">Discard</button>
+                            <button type="button" class="quasar-button quasar-button-primary" disabled="@(!IsDirty || _busy)" @onclick="Save">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            @if (_draft.FirstProblem() is { } problem)
+            {
+                <div class="quasar-notice">⚠ @problem Items marked ⚠ can be saved, but Sens Essentials refuses to run them until fixed.</div>
+            }
+
+            <div class="quasar-segmented se-tabs" role="tablist" aria-label="Config sections">
+                @foreach (var tab in Tabs)
+                {
+                    <button type="button" role="tab" aria-pressed="@(_tab == tab ? "true" : "false")" @onclick="() => _tab = tab">@tab</button>
+                }
+            </div>
+
+            <CascadingValue Value="_session" IsFixed="true">
+                @* Edits inside the tabs bubble up to here, so the Save button and warnings stay current. *@
+                <div class="se-tab-body" @key="_config.Id" @onchange="Edited" @oninput="Edited" @onclick="Edited">
+                    @switch (_tab)
+                    {
+                        case "Servers":
+                            <ServersPanel Highlight="_config" />
+                            break;
+                        case "General":
+                            <GeneralTab Values="_draft" />
+                            break;
+                        case "MOTD":
+                            <MotdTab Values="_draft" />
+                            break;
+                        case "Auto Commands":
+                            <AutoCommandsTab Values="_draft" />
+                            break;
+                        case "Sim Speed":
+                            <AutoCommandsTab Values="_draft" SimSpeed="true" />
+                            break;
+                        case "Info Commands":
+                            <InfoCommandsTab Values="_draft" />
+                            break;
+                        case "Block Presets":
+                            <BlockPresetsTab Values="_draft" />
+                            break;
+                        case "Cleanup Presets":
+                            <CleanupPresetsTab Values="_draft" />
+                            break;
+                        case "Discord Logging":
+                            <DiscordTab Values="_draft" />
+                            break;
+                        case "Admin Tools":
+                            <AdminToolsTab Values="_draft" />
+                            break;
+                        case "Instructions":
+                            <InstructionsTab />
+                            break;
+                    }
+                </div>
+            </CascadingValue>
+
+            <div class="se-status-bar" role="status">
+                <span>@(_session.Message ?? (IsDirty ? "Unsaved changes." : "All changes saved."))</span>
+                @if (_session.CanUndo)
+                {
+                    <button type="button" class="quasar-button" @onclick="_session.Undo">Undo</button>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly string[] Tabs =
+        ["Servers", "General", "MOTD", "Auto Commands", "Sim Speed", "Info Commands", "Block Presets", "Cleanup Presets", "Discord Logging", "Admin Tools", "Instructions"];
+
+    private readonly EditorSession _session = new();
+    private SharedConfig? _config;
+    private SharedConfigValues? _draft;
+    private string _savedJson = "";
+    private string _tab = Tabs[0];
+    private string _newName = "";
+    private bool _showImport;
+    private string _importServerId = "";
+    private bool _busy;
+    private string? _error;
+
+    private bool IsDirty => _draft != null && _draft.ToJson() != _savedJson;
+
+    protected override void OnInitialized()
+    {
+        Store.Changed += OnStoreChanged;
+        Sync.Changed += OnSyncChanged;
+        _session.Changed += OnSessionChanged;
+    }
+
+    public void Dispose()
+    {
+        Store.Changed -= OnStoreChanged;
+        Sync.Changed -= OnSyncChanged;
+        _session.Changed -= OnSessionChanged;
+    }
+
+    private void Edited()
+    {
+        // Rendering after the event is all that is needed.
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void OnSyncChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void OnStoreChanged() => _ = InvokeAsync(() =>
+    {
+        // Another admin changed or deleted the config being edited.
+        if (_config != null)
+        {
+            var current = Store.GetConfig(_config.Id);
+            if (current == null)
+            {
+                _config = null;
+                _draft = null;
+                _error = "The config you were editing was deleted.";
+            }
+            else if (current.Revision != _config.Revision)
+            {
+                var dirty = IsDirty;
+                _config = current;
+                if (!dirty)
+                    Load(current);
+                else
+                    _error = "This config was changed elsewhere. Saving replaces those changes.";
+            }
+        }
+        StateHasChanged();
+    });
+
+    private void Load(SharedConfig config)
+    {
+        _config = config;
+        _draft = config.Values.Clone();
+        _savedJson = _draft.ToJson();
+    }
+
+    private async Task<bool> ConfirmDiscardAsync() =>
+        !IsDirty || await JS.InvokeAsync<bool>("confirm", "Discard the unsaved changes?");
+
+    private async Task ConfirmLeaveAsync(LocationChangingContext context)
+    {
+        if (!await ConfirmDiscardAsync())
+            context.PreventNavigation();
+    }
+
+    private async Task SelectAsync(string? id)
+    {
+        if (id == _config?.Id || !await ConfirmDiscardAsync())
+            return;
+        _error = null;
+        _session.Clear();
+        var config = id == null ? null : Store.GetConfig(id);
+        if (config == null)
+        {
+            _config = null;
+            _draft = null;
+            return;
+        }
+        Load(config);
+    }
+
+    /// <summary>Runs a store change, showing why it failed instead of breaking the page.</summary>
+    private bool TryStore(Action change)
+    {
+        try
+        {
+            change();
+            return true;
+        }
+        catch (Exception e)
+        {
+            _error = e.Message;
+            return false;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newName) || !await ConfirmDiscardAsync())
+            return;
+        SharedConfig? created = null;
+        if (!TryStore(() => created = Store.Create(_newName)))
+            return;
+        _newName = "";
+        _error = null;
+        _session.Clear();
+        Load(created!);
+        _tab = "General";
+    }
+
+    private async Task ImportAsync()
+    {
+        if (!await ConfirmDiscardAsync())
+            return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var values = await Sync.ExportAsync(_importServerId, CancellationToken.None);
+            var created = Store.Create(_newName, values);
+            _newName = "";
+            _importServerId = "";
+            _showImport = false;
+            _session.Clear();
+            Load(created);
+            _tab = "Servers";
+        }
+        catch (Exception e)
+        {
+            _error = "Could not copy the server's settings: " + e.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CopyAsync(SharedConfig config)
+    {
+        if (!await ConfirmDiscardAsync())
+            return;
+        SharedConfig? created = null;
+        if (!TryStore(() => created = Store.Create(config.Name + " (copy)", config.Values)))
+            return;
+        _error = null;
+        _session.Clear();
+        Load(created!);
+    }
+
+    private async Task DeleteAsync(SharedConfig config)
+    {
+        var count = Store.GetAssignments().Values.Count(a => a.ConfigId == config.Id);
+        var question = count == 0
+            ? $"Delete \"{config.Name}\"?"
+            : $"Delete \"{config.Name}\"? Its {count} server(s) go back to being configured on their own and keep their settings.";
+        if (!await JS.InvokeAsync<bool>("confirm", question))
+            return;
+        if (!TryStore(() => Store.Delete(config.Id)))
+            return;
+        if (_config?.Id == config.Id)
+        {
+            _config = null;
+            _draft = null;
+        }
+    }
+
+    private void Rename(ChangeEventArgs e)
+    {
+        var name = e.Value?.ToString()?.Trim();
+        if (_config == null || string.IsNullOrEmpty(name) || name == _config.Name)
+            return;
+        var dirty = IsDirty;
+        if (!TryStore(() => Store.Rename(_config.Id, name)))
+            return;
+        var renamed = Store.GetConfig(_config.Id)!;
+        _config = renamed;
+        if (!dirty)
+            Load(renamed);
+        _session.Say($"Renamed to \"{name}\".");
+    }
+
+    private void Save()
+    {
+        if (_config == null || _draft == null)
+            return;
+        _busy = true;
+        try
+        {
+            var saved = Store.Save(_config.Id, _draft);
+            _error = null;
+            Load(saved);
+            var count = Store.GetAssignments().Values.Count(a => a.ConfigId == saved.Id);
+            _session.Say(count == 0
+                ? $"Saved revision {saved.Revision}. No server follows this config yet; choose them on the Servers tab."
+                : $"Saved revision {saved.Revision}. Sending it to {count} server(s).");
+        }
+        catch (Exception e)
+        {
+            _error = "Could not save: " + e.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Discard()
+    {
+        if (_config == null)
+            return;
+        Load(_config);
+        _session.Say("Changes discarded.");
+    }
+}

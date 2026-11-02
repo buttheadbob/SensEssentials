@@ -1,0 +1,165 @@
+@* The Torch tab's Instructions, for Magnetar servers and shared configs. Keep in step with the README guide. *@
+
+<div class="quasar-segmented" role="tablist" aria-label="Instructions">
+    @foreach (var topic in Topics)
+    {
+        <button type="button" role="tab" aria-pressed="@(_topic == topic ? "true" : "false")" @onclick="() => _topic = topic">@topic</button>
+    }
+</div>
+
+<section class="quasar-panel se-section se-instructions">
+    <div class="quasar-form-section">
+        @switch (_topic)
+        {
+            case "Getting Started":
+                <h2>Welcome to Sens Essentials</h2>
+                <p>A shared config is one set of Sens Essentials settings that any number of servers can follow. Create a config, edit
+                    it on these tabs, choose its servers on the Servers tab, then click Save. Every server following it gets the
+                    change within seconds; servers that are offline get it as soon as they connect.</p>
+                <p>While a server follows a shared config, changes made to Sens Essentials on that server's Plugins page are undone,
+                    so the config stays the same everywhere. The server's General tab names the config it follows. Choose
+                    "Configured on its own" on the Servers tab to edit a server by itself again; it keeps the settings it has.</p>
+                <p>To start from a server you already set up, use "New from server" next to the list of configs.</p>
+                <h3>Quick reference: chat commands</h3>
+                <ul>
+                    <li>!admin runpreset &lt;name&gt;: run a Block Preset</li>
+                    <li>!admin runcleanup &lt;name&gt;: run a Cleanup Preset</li>
+                    <li>!admin runauto &lt;name&gt; / !admin cancelauto &lt;name&gt;: run or cancel an Auto Command</li>
+                    <li>!identity clean &lt;days&gt; [includeNpcs]: reset players inactive for that many days to a brand-new state (keeps the identity)</li>
+                    <li>!identity purge &lt;days&gt; [includeNpcs]: remove players inactive for that many days and everything they own</li>
+                    <li>!identity clear &lt;player&gt;: reset one player to a brand-new state</li>
+                    <li>!info &lt;name&gt;: show an Info Command (on Magnetar)</li>
+                </ul>
+                <p class="se-hint">"Brand-new" means: grids they mostly own are deleted (their blocks on other players' ships go to that
+                    ship's owner), their offline character is removed, and they leave their faction and lose their GPS markers,
+                    reputation and credits. NPCs are skipped unless includeNpcs is true. Online players are never touched by the
+                    day-based commands.</p>
+                <h3>Editing</h3>
+                <ul>
+                    <li>Nothing reaches the servers until you click Save. Discard goes back to the saved config.</li>
+                    <li>After removing anything (a preset, a step, a handler...), click Undo at the bottom to put it back.</li>
+                    <li>Time fields use HH:MM:SS. A field that cannot be read turns red.</li>
+                    <li>A ⚠ next to an item means something needs attention. Select it to see what.</li>
+                </ul>
+                break;
+
+            case "Auto Commands":
+                <h2>Auto Commands</h2>
+                <p>Run any command automatically: on a timer, at a time of day, at startup, on a player vote, or when the number of
+                    grids or players crosses a limit. Sim speed triggers have their own tab.</p>
+                <ol>
+                    <li>Click "Add auto command" and give it a name.</li>
+                    <li>Choose a trigger. Only the settings that trigger uses are shown, with a short description underneath.</li>
+                    <li>Add steps. Each step is a command including the !, run in order. The delay is how long to wait after that step.</li>
+                </ol>
+                <h3>Example: restart warning</h3>
+                <p>Trigger Timed, repeat every 04:00:00. Step 1: !say Server restarting in 5 minutes (delay 00:04:00). Step 2:
+                    !say Server restarting in 1 minute (delay 00:01:00). Step 3: the restart command.</p>
+                <p class="se-hint">On Magnetar, steps can run any command registered with Magnetar.</p>
+                break;
+
+            case "Sim Speed":
+                <h2>Sim Speed Triggers</h2>
+                <p>Run commands when the server's simulation speed crosses a threshold: clean up, warn players or run diagnostics
+                    when the server is under heavy load.</p>
+                <p>When sim speed crosses the Threshold Ratio in the chosen direction, a timer starts. Only if sim speed stays on that
+                    side for the whole Duration do the steps run. After that, they cannot run again until the Cooldown has passed, so
+                    short lag spikes never trigger anything.</p>
+                <ul>
+                    <li>Compare: GreaterThan runs when sim speed rises above the threshold, LessThan when it drops below.</li>
+                    <li>Threshold Ratio: 0.0 (0%) to 1.0 (100%). 0.4 with LessThan means "below 40%".</li>
+                    <li>Duration: how long sim speed must stay past the threshold, for example 00:00:10.</li>
+                    <li>Cooldown: the least time between two runs, for example 00:10:00.</li>
+                    <li>Hysteresis (optional): after a run, sim speed must first recover past the Recovery Ratio (default 0.7) before
+                        it can run again. Start with Duration and Cooldown; add Hysteresis only if you still see repeated runs.</li>
+                </ul>
+                <h3>Example: lag cleanup</h3>
+                <p>LessThan 0.4, duration 00:00:10, cooldown 00:10:00, hysteresis on at 0.7, one step: !admin runcleanup "Dead Grids".
+                    A short dip to 38% does not trigger it, it runs at most once every 10 minutes, and after a run sim speed must reach
+                    70% before it can run again.</p>
+                break;
+
+            case "Info Commands":
+                <h2>Info Commands</h2>
+                <p>Custom commands that answer players. On Magnetar players type !info &lt;command&gt;, and !info list shows them all.</p>
+                <ul>
+                    <li>Chat Response: a short message sent back in chat.</li>
+                    <li>Dialog Response: a longer message in a dialog (needs MagnetarMod in the world, otherwise it is sent as chat).</li>
+                    <li>URL: a web address opened in the player's Steam overlay.</li>
+                </ul>
+                <p class="se-hint">Fill in any combination, for example a chat line saying "see the dialog" together with a longer dialog.</p>
+                break;
+
+            case "Presets":
+                <h2>Block Presets</h2>
+                <p>Turn blocks on or off, or remove them, across the server.</p>
+                <ol>
+                    <li>Add a preset, give it a name and choose the action: TurnOn, TurnOff or Remove.</li>
+                    <li>Add items. Each targets blocks by type or subtype, with or without the MyObjectBuilder_ prefix.</li>
+                    <li>Optionally add conditions to limit which grids are affected, for example no power, or owned by nobody.</li>
+                </ol>
+                <p>Run it with !admin runpreset "Disable Drills", or as an auto command step.</p>
+                <h2>Cleanup Presets</h2>
+                <p>Delete grids by name, owner, power, distance from players and many other conditions. !cleanup help lists them in game.</p>
+                <ul>
+                    <li>Targets say what you are looking for. Each target runs as its own !cleanup delete.</li>
+                    <li>Conditions are added to every target.</li>
+                    <li>Apply To All runs once with only the conditions.</li>
+                    <li>Delete Floating Objects as the action removes loose floating items and needs nothing else.</li>
+                </ul>
+                <p>Run it with !admin runcleanup "Dead Grids", or as an auto command step to clean up on a schedule. If any condition is
+                    unknown, missing its parameter or has a parameter that cannot be read, nothing is deleted and the reason is shown.</p>
+                break;
+
+            case "Discord Logging":
+                <h2>Discord Logging</h2>
+                <p>Posts log entries to Discord channels, so you hear about errors without watching the console. Each handler sends to
+                    one channel and picks entries by level and logger name; an entry goes to every handler that wants it. On Magnetar,
+                    only the logs of Magnetar plugins are seen.</p>
+                <ol>
+                    <li>In Discord, open the channel's settings, Integrations, Webhooks, New Webhook, Copy Webhook URL.</li>
+                    <li>Add a handler and paste the URL.</li>
+                    <li>Choose the levels to send. Warn to Fatal is a good start.</li>
+                </ol>
+                <ul>
+                    <li>Logger filters: "only these" and "never these" loggers, comma separated; end a name with * to match by prefix.</li>
+                    <li>Pings: the role and user IDs listed are pinged with every entry the handler sends.</li>
+                    <li>Rate limit: each webhook posts at most this many entries a second; the rest are dropped and counted.</li>
+                    <li>Long errors: stack traces longer than the limit, and errors with inner exceptions, are attached as log.txt.</li>
+                </ul>
+                break;
+
+            case "Admin Tools":
+                <h2>Admin Tools</h2>
+                <p>Suit Refill keeps chosen players' suits topped up every 10 seconds: oxygen, hydrogen, energy, health, food and
+                    radiation, each of which can be turned off.</p>
+                <ul>
+                    <li>Admins and owners: every online player with the Admin or Owner rank.</li>
+                    <li>Everyone (lobby mode): every online player, for lobby and hub worlds.</li>
+                    <li>Timed refill: !admin refill &lt;player&gt; [minutes] refills one player for a while. The player can be a name while
+                        online, or a Steam ID. The default is 30 minutes; 0 stops it. Timed refills end when the server restarts.</li>
+                </ul>
+                break;
+
+            case "Servers":
+                <h2>Servers</h2>
+                <p>The Servers tab lists every server connected to Quasar, and the servers assigned to this config that are offline.</p>
+                <ul>
+                    <li>"Up to date" means the server runs the latest saved revision of its config.</li>
+                    <li>"Sens Essentials is not loaded" means the server does not run the Sens Essentials Magnetar plugin. Add it to the
+                        server's plugins.</li>
+                    <li>An error about the companion means the server was started before this Quasar plugin was enabled. Restart the
+                        server so Quasar adds the Sens Essentials companion to it.</li>
+                    <li>Cluster nodes are not listed: a cluster's plugins are configured through the cluster's own plugin configuration.</li>
+                </ul>
+                break;
+        }
+    </div>
+</section>
+
+@code {
+    private static readonly string[] Topics =
+        ["Getting Started", "Auto Commands", "Sim Speed", "Info Commands", "Presets", "Discord Logging", "Admin Tools", "Servers"];
+
+    private string _topic = Topics[0];
+}

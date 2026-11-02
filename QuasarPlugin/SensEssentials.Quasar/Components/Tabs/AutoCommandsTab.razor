@@ -1,0 +1,171 @@
+@* Auto Commands and Sim Speed share the AutoCommands list, like the Torch tab: Sim Speed shows the sim speed triggers. *@
+
+<div class="se-split">
+    <ItemList TItem="AutoCommandValues" Items="Values.AutoCommands" @bind-Selected="_selected"
+              Label="c => c.Name" Problem="c => c.Problem(Values.AutoCommands)" Create="Create"
+              Filter="c => (c.Trigger == Trigger.SimSpeed) == SimSpeed"
+              AddText="@(SimSpeed ? "Add sim speed trigger" : "Add auto command")"
+              EmptyText="@(SimSpeed ? "No sim speed triggers yet." : "No auto commands yet.")" />
+
+    @if (_selected == null)
+    {
+        <p class="se-hint se-empty-detail">@(SimSpeed ? "Select a sim speed trigger, or add one." : "Select an auto command, or add one.")</p>
+    }
+    else
+    {
+        var c = _selected;
+        <div class="se-detail">
+            @if (c.Problem(Values.AutoCommands) is { } problem)
+            {
+                <div class="quasar-notice quasar-notice-error">⚠ @problem</div>
+            }
+            <section class="quasar-panel se-section">
+                <div class="quasar-form-section">
+                    <h2>@(SimSpeed ? "Trigger Settings" : "Command Settings")</h2>
+                    <div class="se-form">
+                        <label class="quasar-field">
+                            Name
+                            <input @bind="c.Name" @bind:event="oninput" />
+                            <small>Used with !admin runauto, !admin cancelauto@(c.Trigger == Trigger.Vote ? " and !vote" : "").</small>
+                        </label>
+
+                        @if (SimSpeed)
+                        {
+                            <label class="quasar-field se-narrow">
+                                Compare
+                                <EnumSelect TEnum="Gtl" @bind-Value="c.Compare" Options="[Gtl.GreaterThan, Gtl.LessThan]" />
+                            </label>
+                            <label class="quasar-field se-narrow">
+                                Threshold Ratio (0 - 1)
+                                <input type="number" step="0.05" min="0" max="1" @bind="c.TriggerRatio" />
+                                <small>Sim speed value that begins tracking. 0.5 = 50%.</small>
+                            </label>
+                            <TimeField Label="Duration (HH:MM:SS)" @bind-Value="c.SimSpeedDuration"
+                                       Hint="How long sim speed must continuously stay past the threshold before the steps run." />
+                            <TimeField Label="Cooldown (HH:MM:SS)" @bind-Value="c.SimSpeedCooldown"
+                                       Hint="Minimum time between two runs." />
+                            <label class="quasar-check">
+                                <input type="checkbox" @bind="c.HysteresisEnabled" /> Enable Hysteresis
+                            </label>
+                            <label class="quasar-field se-narrow">
+                                Recovery Ratio (0 - 1)
+                                <input type="number" step="0.05" min="0" max="1" @bind="c.HysteresisRatio" disabled="@(!c.HysteresisEnabled)" />
+                                <small>Sim speed must recover past this value (opposite direction) before the trigger arms again.</small>
+                            </label>
+                            <div class="quasar-notice">
+                                Hysteresis prevents rapid re-triggering when sim speed hovers near the threshold. When enabled, after
+                                running, sim speed must recover past the Recovery Ratio (in the opposite direction) before the trigger
+                                can arm again. A recovery during the cooldown counts; the cooldown only delays the next run. Leave it
+                                off unless you see repeated triggers from sim speed going up and down.
+                            </div>
+                        }
+                        else
+                        {
+                            <label class="quasar-field se-narrow">
+                                Trigger
+                                <EnumSelect TEnum="Trigger" @bind-Value="c.Trigger" Options="AutoTriggers" />
+                            </label>
+
+                            @switch (c.Trigger)
+                            {
+                                case Trigger.Timed:
+                                    <TimeField Label="Repeat every (HH:MM:SS)" @bind-Value="c.Interval" />
+                                    break;
+                                case Trigger.Scheduled:
+                                    <TimeField Label="Time of day (HH:MM:SS)" @bind-Value="c.Interval" Hint="Server time. Example: 04:30:00 runs at 4:30 AM." />
+                                    <label class="quasar-field se-narrow">
+                                        Day of week
+                                        <EnumSelect TEnum="SensEssentials.DayOfWeek" @bind-Value="c.DayOfWeek" Text="DayText" />
+                                    </label>
+                                    break;
+                                case Trigger.GridCount:
+                                case Trigger.PlayerCount:
+                                    <TimeField Label="Check every (HH:MM:SS)" @bind-Value="c.Interval" Hint="How often the count is checked. Also the minimum time between runs." />
+                                    <label class="quasar-field se-narrow">
+                                        Run when the count is
+                                        <EnumSelect TEnum="Gtl" @bind-Value="c.Compare" />
+                                    </label>
+                                    <label class="quasar-field se-narrow">
+                                        Count
+                                        <input type="number" min="0" @bind="c.TriggerCount" />
+                                    </label>
+                                    break;
+                                case Trigger.Vote:
+                                    <TimeField Label="Vote length (HH:MM:SS)" @bind-Value="c.Interval" />
+                                    <label class="quasar-field se-narrow">
+                                        Yes votes needed (0 - 1)
+                                        <input type="number" step="0.05" min="0" max="1" @bind="c.TriggerRatio" />
+                                        <small>Share of online players who must vote yes. 0.5 = 50%.</small>
+                                    </label>
+                                    <label class="quasar-field se-narrow">
+                                        Cooldown per player (sec)
+                                        <input type="number" min="0" @bind="c.TriggerCount" />
+                                        <small>How long a player must wait before starting another vote.</small>
+                                    </label>
+                                    break;
+                            }
+
+                            <div class="quasar-notice">@TriggerDescription(c.Trigger)</div>
+                        }
+                    </div>
+                </div>
+            </section>
+
+            <section class="quasar-panel se-section">
+                <div class="quasar-form-section">
+                    <h2>Steps</h2>
+                    <p class="se-hint">Each step is a command including the !, for example !save. The delay is how long to wait after
+                        that step before the next one. On Magnetar, steps can run any command registered with Magnetar.</p>
+                    <RowList TItem="AutoCommandStepValues" Items="c.Steps" Create="() => new AutoCommandStepValues()" AddText="Add Step" ItemName="step"
+                             EmptyText="No steps yet.">
+                        <Header>
+                            <th>Command</th>
+                            <th class="se-time-column">Delay (HH:MM:SS)</th>
+                        </Header>
+                        <Row Context="step">
+                            <td><input class="se-cell-input" @bind="step.Command" placeholder="!command" aria-label="Command" /></td>
+                            <td><input class="se-cell-input @(SharedConfigValues.IsTime(step.Delay) ? "" : "se-invalid")" @bind="step.Delay" aria-label="Delay" /></td>
+                        </Row>
+                    </RowList>
+                </div>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SharedConfigValues Values { get; set; } = null!;
+
+    /// <summary>True for the Sim Speed tab, which shows only the sim speed triggers.</summary>
+    [Parameter] public bool SimSpeed { get; set; }
+
+    private static readonly Trigger[] AutoTriggers =
+        [Trigger.Disabled, Trigger.Timed, Trigger.Scheduled, Trigger.OnStart, Trigger.GridCount, Trigger.PlayerCount, Trigger.Vote];
+
+    private AutoCommandValues? _selected;
+
+    protected override void OnParametersSet()
+    {
+        // A different config, or a selection that moved to the other tab, or was removed.
+        if (_selected != null && (!Values.AutoCommands.Contains(_selected) || (_selected.Trigger == Trigger.SimSpeed) != SimSpeed))
+            _selected = null;
+    }
+
+    private AutoCommandValues Create() => SimSpeed
+        ? new AutoCommandValues { Name = "New sim speed trigger", Trigger = Trigger.SimSpeed, Compare = Gtl.LessThan, TriggerRatio = 0.5f, SimSpeedCooldown = "00:10:00" }
+        : new AutoCommandValues { Name = "New auto command", Trigger = Trigger.Timed, Interval = "01:00:00" };
+
+    private static string DayText(SensEssentials.DayOfWeek day) => day == SensEssentials.DayOfWeek.All ? "Every day" : day.ToString();
+
+    private static string TriggerDescription(Trigger trigger) => trigger switch
+    {
+        Trigger.Disabled => "This command never runs on its own. You can still run it with !admin runauto <name>.",
+        Trigger.Timed => "Runs the steps over and over, waiting the Repeat Every time between runs.",
+        Trigger.Scheduled => "Runs the steps once a day at the Time Of Day (server time), on the chosen day or every day.",
+        Trigger.OnStart => "Runs the steps once, shortly after the server has finished starting.",
+        Trigger.GridCount => "Checks the number of grids every Check Every interval and runs the steps when the comparison is true. It will not start again while a previous run is still going.",
+        Trigger.PlayerCount => "Checks the number of online players every Check Every interval and runs the steps when the comparison is true. It will not start again while a previous run is still going.",
+        Trigger.Vote => "Players start a vote with !vote <name>. If enough online players type !yes before the vote ends, the steps run.",
+        _ => ""
+    };
+}

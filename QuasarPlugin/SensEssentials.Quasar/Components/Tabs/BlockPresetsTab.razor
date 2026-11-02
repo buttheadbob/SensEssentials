@@ -1,0 +1,85 @@
+<div class="se-split">
+    <ItemList TItem="BlockPresetValues" Items="Values.BlockPresets" @bind-Selected="_selected"
+              Label="b => b.Name" Problem="b => b.Problem()"
+              Create="Create"
+              AddText="Add block preset" EmptyText="No block presets yet." />
+
+    @if (_selected == null)
+    {
+        <p class="se-hint se-empty-detail">Select a block preset, or add one.</p>
+    }
+    else
+    {
+        var b = _selected;
+        <div class="se-detail">
+            @if (b.Problem() is { } problem)
+            {
+                <div class="quasar-notice quasar-notice-error">⚠ @problem A preset marked ⚠ is refused when run.</div>
+            }
+            <section class="quasar-panel se-section">
+                <div class="quasar-form-section">
+                    <h2>Preset</h2>
+                    <div class="se-form">
+                        <label class="quasar-field">
+                            Name
+                            <input @bind="b.Name" @bind:event="oninput" />
+                            <small>Run it with !admin runpreset "@(string.IsNullOrWhiteSpace(b.Name) ? "<name>" : b.Name)", or as an auto command step.</small>
+                        </label>
+                        <label class="quasar-field se-narrow">
+                            Action
+                            <EnumSelect TEnum="BlockAction" @bind-Value="b.Action" />
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <section class="quasar-panel se-section">
+                <div class="quasar-form-section">
+                    <h2>Items</h2>
+                    <p class="se-hint">Each item targets blocks by type or subtype. Types work with or without the MyObjectBuilder_ prefix
+                        (Reactor and MyObjectBuilder_Reactor both work). The delay is how long to wait after the item.</p>
+                    <RowList TItem="BlockPresetItemValues" Items="b.Items" Create="() => new BlockPresetItemValues()" AddText="Add Item" ItemName="item"
+                             EmptyText="No items yet.">
+                        <Header>
+                            <th class="se-select-column">Selector</th>
+                            <th>Value</th>
+                            <th class="se-time-column">Delay (HH:MM:SS)</th>
+                        </Header>
+                        <Row Context="item">
+                            <td><EnumSelect TEnum="SelectorType" @bind-Value="item.Selector" AriaLabel="Selector" /></td>
+                            <td><input class="se-cell-input @(string.IsNullOrWhiteSpace(item.Value) ? "se-invalid" : "")" @bind="item.Value" aria-label="Value" /></td>
+                            <td><input class="se-cell-input @(SharedConfigValues.IsTime(item.Delay) ? "" : "se-invalid")" @bind="item.Delay" aria-label="Delay" /></td>
+                        </Row>
+                    </RowList>
+                </div>
+            </section>
+
+            <section class="quasar-panel se-section">
+                <div class="quasar-form-section">
+                    <h2>Conditions</h2>
+                    <p class="se-hint">Optional. Only grids matching all of these are affected. They are the same conditions as !cleanup,
+                        listed in game by !cleanup help.</p>
+                    <ConditionRows TCondition="BlockPresetConditionValues" TType="ConditionType" Items="b.Conditions"
+                                   Create="() => new BlockPresetConditionValues()"
+                                   ConditionOf="c => c.Condition" SetCondition="(c, t) => c.Condition = t"
+                                   ParameterOf="c => c.Parameter" SetParameter="(c, p) => c.Parameter = p"
+                                   RequiresParameter="t => t.RequiresParameter()" />
+                </div>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SharedConfigValues Values { get; set; } = null!;
+
+    private BlockPresetValues? _selected;
+
+    private static BlockPresetValues Create() => new() { Name = "New block preset" };
+
+    protected override void OnParametersSet()
+    {
+        if (_selected != null && !Values.BlockPresets.Contains(_selected))
+            _selected = null;
+    }
+}

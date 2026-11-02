@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>F86AF58D-965F-4301-A95F-5AEC7F3627C5</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>SensEssentials</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Commands\AdminActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Commands\BlocksActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Commands\CleanupActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Commands\EcoActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Commands\EntityActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Commands\GridActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Commands\InfoActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Commands\PlayerActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Commands\VotingActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Commands\VoxelActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Commands\WorldActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conditions\Condition.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conditions\ConditionAttribute.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conditions\ConditionModule.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conditions\ConditionsChecker.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conditions\ConditionsImplementations.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Config\AutoCommand.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Config\BlockList.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Config\CleanupPreset.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Config\CommandPermissions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Config\ConfigEnums.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Config\DiscordLogHandler.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Config\EssentialsConfig.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Config\InfoCommand.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Core\CommandActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Core\EssentialsCore.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Core\EssentialsSession.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Core\GameThread.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Core\ObservableObject.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Discord\DiscordLogging.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Discord\DiscordWebhook.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Features\AutoCommands.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Features\Backpacks.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Features\KnownIdsStorage.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Features\Motd.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Features\SimSpeedEvents.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Features\SuitRefill.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Patches\GameTagsPatch.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Patches\SessionDownloadPatch.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Utils\Events.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Utils\GridFinder.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Utils\Ownership.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Utils\Utilities.cs" />
+  </ItemGroup>
+</Project>

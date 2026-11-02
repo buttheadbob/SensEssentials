@@ -1,0 +1,40 @@
+<section class="quasar-panel se-section">
+    <div class="quasar-form-section">
+        <h2>Suit Refill</h2>
+        <p class="se-hint">Keeps the chosen players' suits topped up every 10 seconds.</p>
+        <div class="se-form">
+            <label class="quasar-check">
+                <input type="checkbox" @bind="Values.SuitRefillEnabled" /> Enable Suit Refill
+            </label>
+        </div>
+    </div>
+    <div class="quasar-form-section">
+        <h2>Who is refilled</h2>
+        <div class="se-form">
+            <label class="quasar-check">
+                <input type="checkbox" @bind="Values.SuitRefillAdmins" /> Admins and owners
+            </label>
+            <label class="quasar-check">
+                <input type="checkbox" @bind="Values.SuitRefillEveryone" /> Everyone (lobby mode)
+            </label>
+            <p class="se-hint">Lobby mode is meant for lobby and hub worlds where nobody should need supplies. To refill one player
+                for a while, for example during an event, use !admin refill &lt;player&gt; [minutes] in game (default 30, 0 stops it).</p>
+        </div>
+    </div>
+    <div class="quasar-form-section">
+        <h2>What is refilled</h2>
+        <div class="se-form se-check-grid">
+            <label class="quasar-check"><input type="checkbox" @bind="Values.SuitRefillOxygen" /> Oxygen</label>
+            <label class="quasar-check"><input type="checkbox" @bind="Values.SuitRefillHydrogen" /> Hydrogen</label>
+            <label class="quasar-check"><input type="checkbox" @bind="Values.SuitRefillEnergy" /> Energy</label>
+            <label class="quasar-check"><input type="checkbox" @bind="Values.SuitRefillHealth" /> Health</label>
+            <label class="quasar-check"><input type="checkbox" @bind="Values.SuitRefillFood" /> Food (worlds that use food)</label>
+            <label class="quasar-check"><input type="checkbox" @bind="Values.SuitRefillRadiationImmunity" /> Radiation immunity</label>
+            <label class="quasar-check"><input type="checkbox" @bind="Values.SuitResetRadiation" /> Bring radiation down to a low level</label>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public SharedConfigValues Values { get; set; } = null!;
+}

@@ -1,0 +1,98 @@
+@typeparam TItem where TItem : class
+@* The list on the left of a list tab: select an item to edit it on the right. ⚠ marks items that need attention. *@
+
+<div class="se-list">
+    <div class="se-list-toolbar">
+        <button type="button" class="quasar-button quasar-button-primary" @onclick="Add">+ @AddText</button>
+    </div>
+    @if (!Visible.Any())
+    {
+        <p class="se-hint">@EmptyText</p>
+    }
+    else
+    {
+        <ul class="se-list-items">
+            @foreach (var item in Visible)
+            {
+                var problem = Problem?.Invoke(item);
+                var selected = ReferenceEquals(item, Selected);
+                <li class="se-list-row @(selected ? "se-selected" : "")" @key="item">
+                    <button type="button" class="se-list-item" aria-pressed="@(selected ? "true" : "false")" @onclick="() => Select(item)">
+                        @if (problem != null)
+                        {
+                            <span class="se-warn" title="@problem">⚠</span>
+                        }
+                        <span class="se-list-label">@DisplayLabel(item)</span>
+                    </button>
+                    <span class="se-row-buttons">
+                        <button type="button" class="se-small-button" title="Move up" aria-label="Move up" @onclick="() => Move(item, -1)">▲</button>
+                        <button type="button" class="se-small-button" title="Move down" aria-label="Move down" @onclick="() => Move(item, 1)">▼</button>
+                        <button type="button" class="se-small-button se-remove" title="Remove" aria-label="Remove" @onclick="() => Remove(item)">✕</button>
+                    </span>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<TItem> Items { get; set; } = null!;
+    [Parameter] public TItem? Selected { get; set; }
+    [Parameter] public EventCallback<TItem?> SelectedChanged { get; set; }
+    [Parameter, EditorRequired] public Func<TItem, string> Label { get; set; } = null!;
+    [Parameter] public Func<TItem, string?>? Problem { get; set; }
+    [Parameter, EditorRequired] public Func<TItem> Create { get; set; } = null!;
+
+    /// <summary>Shows only some items, for tabs that edit part of a list (Sim Speed and Auto Commands share one).</summary>
+    [Parameter] public Func<TItem, bool>? Filter { get; set; }
+
+    [Parameter] public string AddText { get; set; } = "Add";
+    [Parameter] public string EmptyText { get; set; } = "Nothing here yet.";
+
+    [CascadingParameter] public EditorSession? Session { get; set; }
+
+    private IEnumerable<TItem> Visible => Filter == null ? Items : Items.Where(Filter);
+
+    private string DisplayLabel(TItem item)
+    {
+        var label = Label(item);
+        return string.IsNullOrWhiteSpace(label) ? "(unnamed)" : label;
+    }
+
+    private async Task Select(TItem item) => await SelectedChanged.InvokeAsync(item);
+
+    private async Task Add()
+    {
+        var item = Create();
+        Items.Add(item);
+        Session?.Edited();
+        await SelectedChanged.InvokeAsync(item);
+    }
+
+    private void Move(TItem item, int direction)
+    {
+        var visible = Visible.ToList();
+        var position = visible.IndexOf(item);
+        var otherPosition = position + direction;
+        if (otherPosition < 0 || otherPosition >= visible.Count)
+            return;
+
+        // Swap with the neighbour that is shown, which with a filter need not be the next item in the list.
+        var index = Items.IndexOf(item);
+        var otherIndex = Items.IndexOf(visible[otherPosition]);
+        (Items[index], Items[otherIndex]) = (Items[otherIndex], Items[index]);
+        Session?.Edited();
+    }
+
+    private async Task Remove(TItem item)
+    {
+        var index = Items.IndexOf(item);
+        if (index < 0)
+            return;
+        Items.RemoveAt(index);
+        if (ReferenceEquals(item, Selected))
+            await SelectedChanged.InvokeAsync(null);
+        var label = DisplayLabel(item);
+        Session?.Removed($"Removed {label}.", () => Items.Insert(Math.Min(index, Items.Count), item));
+    }
+}

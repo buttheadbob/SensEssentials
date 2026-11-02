@@ -1,0 +1,32 @@
+<section class="quasar-panel se-section">
+    <div class="quasar-form-section">
+        <h2>Message of the Day</h2>
+        <div class="se-form">
+            <label class="quasar-field">
+                MOTD (shown to all players when they spawn)
+                <textarea rows="6" @bind="Values.Motd"></textarea>
+                <small>%player% is replaced with the player's name. Players can see it again with !motd.</small>
+            </label>
+            <label class="quasar-field">
+                New User MOTD (shown instead to players joining for the first time)
+                <textarea rows="6" @bind="Values.NewUserMotd"></textarea>
+            </label>
+        </div>
+    </div>
+    <div class="quasar-form-section">
+        <h2>MOTD URL</h2>
+        <div class="se-form">
+            <label class="quasar-field">
+                URL (opens in the Steam overlay instead of showing the text)
+                <input @bind="Values.MotdUrl" placeholder="https://" />
+            </label>
+            <label class="quasar-check">
+                <input type="checkbox" @bind="Values.NewUserMotdUrl" /> URL for new users only
+            </label>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public SharedConfigValues Values { get; set; } = null!;
+}

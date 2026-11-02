@@ -1,0 +1,20 @@
+{
+  "id": "sensessentials.quasar",
+  "displayName": "Sens Essentials",
+  "version": "1.0.0.5",
+  "entryAssembly": "SensEssentials.Quasar.dll",
+  "entryType": "SensEssentials.Quasar.SensEssentialsQuasarPlugin",
+  "projectPath": "QuasarPlugin/SensEssentials.Quasar/SensEssentials.Quasar.csproj",
+  "staticAssets": "QuasarPlugin/SensEssentials.Quasar/wwwroot",
+  "stylesheets": [
+    "sensessentials-quasar.css"
+  ],
+  "quasarVersion": ">=1.4.0",
+  "companionPlugins": [
+    {
+      "id": "sensessentials.quasar",
+      "projectPath": "QuasarPlugin/SensEssentials.QuasarCompanion/SensEssentials.QuasarCompanion.csproj",
+      "entryAssembly": "SensEssentials.QuasarCompanion.dll"
+    }
+  ]
+}

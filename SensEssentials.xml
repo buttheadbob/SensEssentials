@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<PluginData xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="GitHubPlugin">
+    <!-- MagnetarHub descriptor, copy it to the Plugins folder of the magnetar-hub repository when publishing.
+         Magnetar compiles the SourceDirectories below itself, from the pinned commit. The Torch build is not part of it. -->
+
+    <!-- The ID of your plugin, never change this -->
+    <Id>5f03c207-1eab-433d-99fd-114392a8409d</Id>
+
+    <RepoId>buttheadbob/SensEssentials</RepoId>
+
+    <FriendlyName>Sens Essentials</FriendlyName>
+
+    <Author>SentorX</Author>
+
+    <Tooltip>Must-have utilities and administration tools for dedicated servers</Tooltip>
+
+    <Description>
+Sens Essentials is a collection of utilities and administration tools for Space Engineers dedicated servers.
+
+- Auto Commands: run any command on a timer, at a time of day, at startup, on a player vote, or when grid count,
+  player count or sim speed crosses a limit. Each one runs a list of steps with delays.
+- Cleanup Presets: delete grids by name, owner, power, distance from players and many other conditions.
+  Run with !admin runcleanup &lt;name&gt;.
+- Block Presets: turn blocks on or off, or remove them, across the server. Run with !admin runpreset &lt;name&gt;.
+- MOTD for every player and for new players, with an optional Steam overlay link.
+- Info Commands: custom answers players get with !info &lt;name&gt;, as chat, a dialog or a link.
+- Discord Logging: post log entries to Discord webhooks by level and logger, with pings and rate limits.
+- Suit Refill for admins, everyone (lobby worlds), or one player for a while.
+- Commands for grids, entities, teleporting, economy, voting, voxel resets, factions and inactive identities.
+
+Configure it in Quasar under Server plugins. New Discord handlers start disabled, with both levels at Trace.
+The full guide is in the README on GitHub: https://github.com/buttheadbob/SensEssentials
+
+Also available as a Torch plugin, both builds share the same code.
+    </Description>
+
+    <SourceDirectories>
+        <Directory>ServerPlugin</Directory>
+        <Directory>Shared</Directory>
+        <Directory>Versioning</Directory>
+    </SourceDirectories>
+
+    <!-- TODO: the commit hash of the version to publish -->
+    <Commit>TODO Git commit hash</Commit>
+</PluginData>

@@ -1,0 +1,62 @@
+<div class="se-split">
+    <ItemList TItem="InfoCommandValues" Items="Values.InfoCommands" @bind-Selected="_selected"
+              Label="i => i.Command" Problem="i => i.Problem(Values.InfoCommands)"
+              Create="Create"
+              AddText="Add info command" EmptyText="No info commands yet." />
+
+    @if (_selected == null)
+    {
+        <p class="se-hint se-empty-detail">Select an info command, or add one.</p>
+    }
+    else
+    {
+        var i = _selected;
+        <div class="se-detail">
+            @if (i.Problem(Values.InfoCommands) is { } problem)
+            {
+                <div class="quasar-notice quasar-notice-error">⚠ @problem</div>
+            }
+            <section class="quasar-panel se-section">
+                <div class="quasar-form-section">
+                    <h2>Info Command</h2>
+                    <div class="se-form">
+                        <label class="quasar-field se-narrow">
+                            Command
+                            <input @bind="i.Command" @bind:event="oninput" placeholder="rules" />
+                            <small>On Magnetar players type !info @(string.IsNullOrWhiteSpace(i.Command) ? "<command>" : i.Command); !info list shows them all.</small>
+                        </label>
+                        <label class="quasar-field">
+                            Chat Response
+                            <input @bind="i.ChatResponse" />
+                            <small>A short message sent back in chat.</small>
+                        </label>
+                        <label class="quasar-field">
+                            Dialog Response
+                            <textarea rows="6" @bind="i.DialogResponse"></textarea>
+                            <small>A longer message shown in a dialog, or in chat when the world has no MagnetarMod.</small>
+                        </label>
+                        <label class="quasar-field">
+                            URL
+                            <input @bind="i.Url" placeholder="https://" />
+                            <small>Opened in the player's Steam overlay.</small>
+                        </label>
+                    </div>
+                </div>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SharedConfigValues Values { get; set; } = null!;
+
+    private InfoCommandValues? _selected;
+
+    private static InfoCommandValues Create() => new() { Command = "rules" };
+
+    protected override void OnParametersSet()
+    {
+        if (_selected != null && !Values.InfoCommands.Contains(_selected))
+            _selected = null;
+    }
+}

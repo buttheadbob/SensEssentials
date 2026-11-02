@@ -1,0 +1,127 @@
+@implements IDisposable
+@inject SharedConfigStore Store
+@inject SharedConfigSync Sync
+
+<section class="quasar-panel se-section">
+    <div class="quasar-form-section">
+        <h2>Servers</h2>
+        <p class="se-hint">
+            @if (Highlight != null)
+            {
+                @:Choose which servers follow "@Highlight.Name". A server gets the last saved revision; save to send your changes.
+            }
+            else
+            {
+                @:Choose the shared config each server follows. Servers configured on their own are edited on their Plugins page as usual.
+            }
+        </p>
+        @if (_error != null)
+        {
+            <div class="quasar-notice quasar-notice-error">@_error</div>
+        }
+        @{
+            var servers = Sync.GetServers().Where(s => !s.IsCluster).ToList();
+            var configs = Store.GetConfigs();
+            var assignments = Store.GetAssignments();
+        }
+        @if (servers.Count == 0)
+        {
+            <p class="se-hint">No servers are connected to Quasar right now. Servers show up here once they are running.</p>
+        }
+        else
+        {
+            <div class="quasar-table-scroll">
+                <table class="se-server-table">
+                    <thead>
+                        <tr>
+                            <th>Server</th>
+                            <th>Shared config</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var server in servers)
+                        {
+                            var assignment = assignments.GetValueOrDefault(server.ServerId);
+                            var config = assignment == null ? null : configs.FirstOrDefault(c => c.Id == assignment.ConfigId);
+                            var (text, tone) = Describe(server, config);
+                            <tr class="@(Highlight != null && config?.Id == Highlight.Id ? "se-selected" : "")" @key="server.ServerId">
+                                <td>
+                                    <span class="se-server-name">@server.DisplayName</span>
+                                    @if (server.Status is { Installed: true, Version.Length: > 0 } status)
+                                    {
+                                        <span class="se-hint"> Sens Essentials @status.Version</span>
+                                    }
+                                </td>
+                                <td>
+                                    <select value="@(config?.Id ?? "")" aria-label="@($"Shared config for {server.DisplayName}")"
+                                            @onchange="e => Assign(server, e.Value?.ToString())">
+                                        <option value="">Configured on its own</option>
+                                        @foreach (var option in configs)
+                                        {
+                                            <option value="@option.Id">@option.Name</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td class="@tone">@text</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    /// <summary>The config being edited, whose servers are highlighted. Null for the overview.</summary>
+    [Parameter] public SharedConfig? Highlight { get; set; }
+
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        Sync.Changed += OnChanged;
+        Store.Changed += OnChanged;
+    }
+
+    public void Dispose()
+    {
+        Sync.Changed -= OnChanged;
+        Store.Changed -= OnChanged;
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void Assign(ServerState server, string? configId)
+    {
+        try
+        {
+            _error = null;
+            Store.Assign(server.ServerId, server.DisplayName, string.IsNullOrEmpty(configId) ? null : configId);
+        }
+        catch (Exception e)
+        {
+            _error = e.Message;
+        }
+    }
+
+    private static (string Text, string Tone) Describe(ServerState server, SharedConfig? config)
+    {
+        if (!server.Online)
+            return (config == null ? "Offline" : "Offline. Gets the config when it connects.", "se-muted");
+        if (server.Error != null)
+            return ($"Could not reach the Sens Essentials companion: {server.Error} Restart the server if it was started before this plugin was enabled.", "quasar-text-error");
+        if (server.Status == null)
+            return ("Checking...", "se-muted");
+        if (!server.Status.Installed)
+            return ("Sens Essentials is not loaded on this server.", "quasar-text-warning");
+        if (config != null)
+            return server.Status.ConfigId == config.Id && server.Status.Revision == config.Revision
+                ? ($"Up to date (revision {config.Revision}).", "quasar-text-success")
+                : ("Sending the config...", "se-muted");
+        return string.IsNullOrEmpty(server.Status.ConfigId)
+            ? ("Configured on its own.", "se-muted")
+            : ($"Releasing from \"{server.Status.Name}\"...", "se-muted");
+    }
+}

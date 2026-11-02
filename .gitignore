@@ -1,0 +1,56 @@
+# Sens Essentials - only sources needed to build the Torch, Magnetar and Quasar plugins are tracked.
+
+# Build output
+[Bb]in/
+[Oo]bj/
+/Build/
+*.pdb
+*.log
+*.tmp
+
+# NuGet (restored on build)
+packages/
+*.nupkg
+*.nuget.props
+*.nuget.targets
+project.lock.json
+
+# Local game / Torch binaries (junctions made by "Setup (run before opening solution).bat")
+GameBinaries
+TorchBinaries
+
+# Local path overrides for the Magnetar build, copy of Directory.Build.props.template
+Directory.Build.props
+
+# IDE / user files
+.vs/
+.vscode/
+.idea/
+*.sln.iml
+*.suo
+*.user
+*.userosscache
+*.userprefs
+*.sln.docstates
+*.DotSettings.user
+_ReSharper*/
+
+# AI assistant files
+.claude/
+AGENTS.md
+Agents.md
+AI_RULES.md
+AI_Rules.md
+CLAUDE.md
+session.txt
+
+# Old CI / release tooling
+Jenkinsfile
+jenkins-grab-se.ps1
+PluginPush.exe
+release.ps1
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store

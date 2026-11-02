@@ -1,0 +1,217 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Sandbox.Game.Entities;
+using Sandbox.Game.World;
+using Sandbox.ModAPI;
+using VRage.Game.ModAPI;
+using VRage.ModAPI;
+using VRage.Utils;
+using VRage.ObjectBuilders;
+
+namespace SensEssentials;
+
+public static class Utilities
+{
+    private const string TypePrefix = "MyObjectBuilder_";
+
+    /// <summary>
+    /// Strips the "MyObjectBuilder_" prefix so "Reactor" and "MyObjectBuilder_Reactor" compare equal.
+    /// </summary>
+    public static string NormalizeTypeName(string typeName)
+    {
+        typeName = typeName.Trim();
+        return typeName.StartsWith(TypePrefix, StringComparison.OrdinalIgnoreCase)
+            ? typeName.Substring(TypePrefix.Length)
+            : typeName;
+    }
+
+    public static bool IsBlockType(MyObjectBuilderType typeId, string typeName)
+    {
+        return string.Equals(NormalizeTypeName(typeId.ToString()), NormalizeTypeName(typeName), StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool HasBlockType(this IMyCubeGrid grid, string typeName)
+    {
+        foreach (var block in ((MyCubeGrid)grid).GetFatBlocks())
+            if (IsBlockType(block.BlockDefinition.Id.TypeId, typeName))
+                return true;
+
+        return false;
+    }
+
+    public static bool HasBlockSubtype(this IMyCubeGrid grid, string subtypeName)
+    {
+        foreach (var block in ((MyCubeGrid)grid).GetFatBlocks())
+            if (string.Compare(block.BlockDefinition.Id.SubtypeName, subtypeName, StringComparison.InvariantCultureIgnoreCase) == 0)
+                return true;
+
+        return false;
+    }
+        
+    public static bool HasBlockTypeFast(this IMyCubeGrid grid, string typeName)
+    {
+        var types = typeName.Split([","], StringSplitOptions.RemoveEmptyEntries);
+        var list = new List<MyObjectBuilderType>();
+
+        foreach (var s in types)
+        {
+            // TryParse only knows the full "MyObjectBuilder_" name, while hastype accepts both forms.
+            if (MyObjectBuilderType.TryParse(TypePrefix + NormalizeTypeName(s), out var typeId))
+            {
+                list.Add(typeId);
+            }
+        }
+
+        if (list.Count == 0)
+        {
+            return false;
+        }
+            
+        foreach (var block in ((MyCubeGrid) grid).GetFatBlocks())
+        {
+            for (var i = 0; i < list.Count; i++)
+            {
+                if (block.BlockDefinition.Id.TypeId == list[i])
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static bool HasBlockSubtypeFast(this IMyCubeGrid grid, string subtypeName)
+    {
+        var subtypes = subtypeName.Split([","], StringSplitOptions.RemoveEmptyEntries);
+        var list = new List<MyStringHash>();
+
+        foreach (var s in subtypes)
+        {
+            // TryGet returns NullOrEmpty for an unknown subtype, which would match every block without a subtype.
+            var hash = MyStringHash.TryGet(s.Trim());
+            if (hash != MyStringHash.NullOrEmpty)
+                list.Add(hash);
+        }
+
+        if (list.Count == 0)
+            return false;
+
+        foreach (var block in ((MyCubeGrid) grid).GetFatBlocks())
+        {
+            for (var i = 0; i < list.Count; i++)
+            {
+                if (block.BlockDefinition.Id.SubtypeId == list[i])
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Removes pilots from a grid before it is deleted, so their characters are not deleted with it.
+    /// </summary>
+    public static void EjectPilots(MyCubeGrid grid)
+    {
+        foreach (var cockpit in grid.GetFatBlocks<MyCockpit>().ToList())
+        {
+            if (cockpit.Pilot != null)
+                cockpit.RemovePilot();
+        }
+    }
+
+    public static bool TryGetEntityByNameOrId(string nameOrId, out IMyEntity? entity)
+    {
+        if (long.TryParse(nameOrId, out long id))
+            return MyAPIGateway.Entities.TryGetEntityById(id, out entity);
+
+        foreach (var ent in MyEntities.GetEntities())
+        {
+            if (ent.DisplayName == nameOrId)
+            {
+                entity = ent;
+                return true;
+            }
+        }
+
+        entity = null;
+        return false;
+    }
+
+    public static IMyIdentity? GetIdentityByNameOrIds(string playerNameOrIds) 
+    {
+        foreach (var identity in MySession.Static.Players.GetAllIdentities()) 
+        {
+            if (identity.DisplayName == playerNameOrIds)
+                return identity;
+
+            if (long.TryParse(playerNameOrIds, out long identityId)) 
+                if (identity.IdentityId == identityId)
+                    return identity;
+
+            if (ulong.TryParse(playerNameOrIds, out ulong steamId)) 
+            {
+                ulong id = GetSteamId(identity.IdentityId);
+                if (id == steamId)
+                    return identity;
+            }
+        }
+
+        return null;
+    }
+
+    public static IMyPlayer? GetPlayerByNameOrId(string nameOrPlayerId)
+    {
+        if (!long.TryParse(nameOrPlayerId, out long id))
+        {
+            foreach (var identity in MySession.Static.Players.GetAllIdentities())
+            {
+                if (identity.DisplayName == nameOrPlayerId)
+                {
+                    id = identity.IdentityId;
+                }
+            }
+        }
+
+        if (MySession.Static.Players.TryGetPlayerId(id, out MyPlayer.PlayerId playerId))
+        {
+            if (MySession.Static.Players.TryGetPlayerById(playerId, out MyPlayer player))
+            {
+                return player;
+            }
+        }
+
+        return null;
+    }
+
+    public static ulong GetSteamId(long identityId) 
+    {
+        return MySession.Static.Players.TryGetSteamId(identityId);
+    }
+
+    public static int GetOnlinePlayerCount()
+    {
+        var result = 0;
+
+        result =  MySession.Static.Players.GetOnlinePlayers()
+            .Count(x => x.IsRealPlayer && !string.IsNullOrEmpty(x.DisplayName));
+
+        return result;
+    }
+
+    public static List<MyPlayer> GetOnlinePlayers()
+    {
+        var result = new List<MyPlayer>(MySession.Static.Players.GetOnlinePlayers()
+            .Where(x => x.IsRealPlayer && !string.IsNullOrEmpty(x.DisplayName)));
+        return result;
+    }
+
+    public static string FormatDataSize(double size)
+    {
+        string p = MyUtils.FormatByteSizePrefix(ref size);
+        return $"{size:N}{p}B";
+    }
+}

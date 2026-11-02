@@ -1,0 +1,38 @@
+@typeparam TEnum where TEnum : struct, Enum
+
+<select value="@Value.ToString()" @onchange="OnChange" aria-label="@AriaLabel">
+    @foreach (var option in Options ?? Enum.GetValues<TEnum>())
+    {
+        <option value="@option.ToString()">@(Text?.Invoke(option) ?? Spaced(option.ToString()))</option>
+    }
+</select>
+
+@code {
+    [Parameter] public TEnum Value { get; set; }
+    [Parameter] public EventCallback<TEnum> ValueChanged { get; set; }
+
+    /// <summary>The values to offer, all of them when null.</summary>
+    [Parameter] public IEnumerable<TEnum>? Options { get; set; }
+
+    [Parameter] public Func<TEnum, string>? Text { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+
+    private async Task OnChange(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<TEnum>(e.Value?.ToString(), out var value))
+            await ValueChanged.InvokeAsync(value);
+    }
+
+    /// <summary>PlayerDistanceLessThan reads as "Player Distance Less Than".</summary>
+    public static string Spaced(string name)
+    {
+        var text = new System.Text.StringBuilder(name.Length + 8);
+        for (var i = 0; i < name.Length; i++)
+        {
+            if (i > 0 && char.IsUpper(name[i]) && !char.IsUpper(name[i - 1]))
+                text.Append(' ');
+            text.Append(name[i]);
+        }
+        return text.ToString();
+    }
+}

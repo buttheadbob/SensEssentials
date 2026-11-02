@@ -1,0 +1,55 @@
+@typeparam TCondition where TCondition : class
+@typeparam TType where TType : struct, Enum
+@* Condition rows for block and cleanup presets, optionally with a delay (cleanup targets). *@
+
+<RowList TItem="TCondition" Items="Items" Create="Create" AddText="@AddText" ItemName="@ItemName" EmptyText="@EmptyText">
+    <Header>
+        <th class="se-condition-column">Condition</th>
+        <th>Parameter</th>
+        @if (DelayOf != null)
+        {
+            <th class="se-time-column">Delay (HH:MM:SS)</th>
+        }
+    </Header>
+    <Row Context="row">
+        @{
+            var type = ConditionOf(row);
+            var parameter = ParameterOf(row);
+            var needsParameter = RequiresParameter(type);
+            var bad = needsParameter ? string.IsNullOrWhiteSpace(parameter) : !string.IsNullOrWhiteSpace(parameter);
+        }
+        <td><EnumSelect TEnum="TType" Value="type" ValueChanged="t => SetCondition(row, t)" AriaLabel="Condition" /></td>
+        <td>
+            <input class="se-cell-input @(bad ? "se-invalid" : "")" value="@parameter" aria-label="Parameter"
+                   placeholder="@(needsParameter ? "" : "no parameter")"
+                   title="@(bad ? (needsParameter ? "This condition needs a parameter." : "This condition does not take a parameter.") : null)"
+                   @onchange="e => SetParameter(row, e.Value?.ToString() ?? string.Empty)" />
+        </td>
+        @if (DelayOf != null)
+        {
+            var delay = DelayOf(row);
+            <td>
+                <input class="se-cell-input @(SharedConfigValues.IsTime(delay) ? "" : "se-invalid")" value="@delay" aria-label="Delay"
+                       @onchange="e => SetDelay!(row, e.Value?.ToString()?.Trim() ?? string.Empty)" />
+            </td>
+        }
+    </Row>
+</RowList>
+
+@code {
+    [Parameter, EditorRequired] public List<TCondition> Items { get; set; } = null!;
+    [Parameter, EditorRequired] public Func<TCondition> Create { get; set; } = null!;
+    [Parameter, EditorRequired] public Func<TCondition, TType> ConditionOf { get; set; } = null!;
+    [Parameter, EditorRequired] public Action<TCondition, TType> SetCondition { get; set; } = null!;
+    [Parameter, EditorRequired] public Func<TCondition, string> ParameterOf { get; set; } = null!;
+    [Parameter, EditorRequired] public Action<TCondition, string> SetParameter { get; set; } = null!;
+    [Parameter, EditorRequired] public Func<TType, bool> RequiresParameter { get; set; } = null!;
+
+    /// <summary>Set for rows that have a delay (cleanup targets).</summary>
+    [Parameter] public Func<TCondition, string>? DelayOf { get; set; }
+    [Parameter] public Action<TCondition, string>? SetDelay { get; set; }
+
+    [Parameter] public string AddText { get; set; } = "Add Condition";
+    [Parameter] public string ItemName { get; set; } = "condition";
+    [Parameter] public string EmptyText { get; set; } = "No conditions.";
+}
