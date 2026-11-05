@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("Sens Essentials")]
-[assembly: AssemblyCopyright("Released into the public domain (Unlicense)")]
+[assembly: AssemblyCopyright("New code under the Unlicense. Based on Torch Essentials, see README")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]

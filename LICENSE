@@ -1,3 +1,12 @@
+SCOPE OF THIS LICENSE
+
+Sens Essentials is based on Torch Essentials (https://github.com/TorchAPI/Essentials).
+The Unlicense below applies only to the new code written for Sens Essentials.
+Code from Torch Essentials, which has no published license, stays under its
+authors' terms.
+
+--------------------------------------------------------------------------------
+
 This is free and unencumbered software released into the public domain.
 
 Anyone is free to copy, modify, publish, use, compile, sell, or

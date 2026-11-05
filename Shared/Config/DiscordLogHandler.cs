@@ -17,16 +17,25 @@ public class DiscordLogHandler : ObservableObject
     private ulong[] _userIds = [];
     private bool _badRoleIds;
     private bool _badUserIds;
+    private bool _validUrl;
 
     public string Name { get; set => SetValue(ref field, value ?? ""); } = "";
 
     public bool Enabled { get; set => SetValue(ref field, value); } = true;
 
-    public string WebhookUrl { get; set => SetValue(ref field, value?.Trim() ?? ""); } = "";
+    public string WebhookUrl
+    {
+        get;
+        set
+        {
+            _validUrl = IsWebhookUrl(value?.Trim() ?? "");
+            SetValue(ref field, value?.Trim() ?? "");
+        }
+    } = "";
 
-    public DiscordLogLevel MinLevel { get; set => SetValue(ref field, value); } = DiscordLogLevel.Warn;
+    public EssentialsLogLevel MinLevel { get; set => SetValue(ref field, value); } = EssentialsLogLevel.Warn;
 
-    public DiscordLogLevel MaxLevel { get; set => SetValue(ref field, value); } = DiscordLogLevel.Fatal;
+    public EssentialsLogLevel MaxLevel { get; set => SetValue(ref field, value); } = EssentialsLogLevel.Fatal;
 
     /// <summary>
     /// Only these loggers are sent. Empty sends every logger. A trailing * matches by prefix.
@@ -59,8 +68,8 @@ public class DiscordLogHandler : ObservableObject
         get;
         set
         {
+            _badRoleIds = !TryParseIds(value ?? "", out _roleIds);
             SetValue(ref field, value ?? "");
-            _badRoleIds = !TryParseIds(field, out _roleIds);
         }
     } = "";
 
@@ -69,8 +78,8 @@ public class DiscordLogHandler : ObservableObject
         get;
         set
         {
+            _badUserIds = !TryParseIds(value ?? "", out _userIds);
             SetValue(ref field, value ?? "");
-            _badUserIds = !TryParseIds(field, out _userIds);
         }
     } = "";
 
@@ -80,7 +89,7 @@ public class DiscordLogHandler : ObservableObject
 
     internal IReadOnlyList<ulong> UserIds => _userIds;
 
-    internal bool CanSend => Enabled && IsWebhookUrl(WebhookUrl);
+    internal bool CanSend => Enabled && _validUrl;
 
     /// <summary>
     /// True when an entry with this level and logger name should be sent by this handler.
@@ -149,10 +158,9 @@ public class DiscordLogHandler : ObservableObject
 
     private static string[] SplitNames(string text)
     {
-        return text.Split([','], StringSplitOptions.RemoveEmptyEntries)
+        return [.. text.Split([','], StringSplitOptions.RemoveEmptyEntries)
             .Select(n => n.Trim())
-            .Where(n => n.Length > 0)
-            .ToArray();
+            .Where(n => n.Length > 0)];
     }
 
     private static bool TryParseIds(string text, out ulong[] ids)
@@ -167,7 +175,7 @@ public class DiscordLogHandler : ObservableObject
                 ok = false;
         }
 
-        ids = result.ToArray();
+        ids = [.. result];
         return ok;
     }
 }

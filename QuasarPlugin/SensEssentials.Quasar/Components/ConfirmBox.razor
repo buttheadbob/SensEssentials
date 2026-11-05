@@ -1,0 +1,39 @@
+@implements IDisposable
+@* A question with Cancel and OK. The browser's own confirm blocks the page, and left open it can end the connection. *@
+
+@if (_question != null)
+{
+    <div class="se-modal-backdrop">
+        <div class="se-modal" role="dialog" aria-modal="true" aria-label="Confirm">
+            <p>@_question</p>
+            <div class="se-modal-actions">
+                <button type="button" class="quasar-button" @onclick="() => Answer(false)">Cancel</button>
+                <button type="button" class="quasar-button quasar-button-primary" @onclick="() => Answer(true)">@_accept</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string? _question;
+    private string _accept = "OK";
+    private TaskCompletionSource<bool>? _answer;
+
+    public Task<bool> AskAsync(string question, string accept)
+    {
+        _answer?.TrySetResult(false);
+        _question = question;
+        _accept = accept;
+        _answer = new TaskCompletionSource<bool>();
+        StateHasChanged();
+        return _answer.Task;
+    }
+
+    private void Answer(bool accepted)
+    {
+        _question = null;
+        _answer?.TrySetResult(accepted);
+    }
+
+    public void Dispose() => _answer?.TrySetResult(false);
+}

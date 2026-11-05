@@ -23,6 +23,7 @@
     <Compile Include="..\..\Versioning\AssemblyVersion.cs" Link="Properties\AssemblyVersion.cs" />
     <!-- The enums of the Sens Essentials config, shared with the server plugins so the names always match -->
     <Compile Include="..\..\Shared\Config\ConfigEnums.cs" Link="Shared\ConfigEnums.cs" />
+    <Compile Include="..\..\Shared\Config\TimeFormat.cs" Link="Shared\TimeFormat.cs" />
     <Compile Include="..\Contracts\SharedConfigContracts.cs" Link="Contracts\SharedConfigContracts.cs" />
   </ItemGroup>
 

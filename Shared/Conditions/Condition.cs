@@ -12,7 +12,8 @@ public class Condition
     public string Command;
     public string? InvertCommand;
     public string? HelpText;
-    private MethodInfo? _method;
+    private readonly MethodInfo _method;
+    private readonly Func<string, object>? _prepare;
     public readonly ParameterInfo? Parameter;
 
     /// <summary>
@@ -45,6 +46,13 @@ public class Condition
             throw new TypeLoadException("Condition can only have two parameters");
 
         Parameter = p.Length == 1 ? null : p[1];
+
+        if (attribute.Prepare != null)
+        {
+            var prepare = _method.DeclaringType?.GetMethod(attribute.Prepare, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static)
+                ?? throw new TypeLoadException($"Condition prepare method {attribute.Prepare} was not found");
+            _prepare = (Func<string, object>)Delegate.CreateDelegate(typeof(Func<string, object>), prepare);
+        }
     }
 
     /// <summary>
@@ -79,8 +87,22 @@ public class Condition
 
         try
         {
-            value = TypeDescriptor.GetConverter(Parameter.ParameterType).ConvertFromInvariantString(arg!);
+            value = _prepare != null
+                ? _prepare(arg!)
+                : TypeDescriptor.GetConverter(Parameter.ParameterType).ConvertFromInvariantString(arg!);
+
+            if (value is double number && (double.IsNaN(number) || double.IsInfinity(number) || number < 0))
+            {
+                error = $"Condition '{Command}' needs a positive number, not '{arg}'.";
+                return false;
+            }
+
             return true;
+        }
+        catch (ArgumentException e) when (_prepare != null)
+        {
+            error = e.Message;
+            return false;
         }
         catch (Exception)
         {
@@ -105,9 +127,6 @@ public class Condition
 
     private bool Invoke(object target, object? value)
     {
-        if (_method is null)
-            return false;
-
         var result = Parameter == null
             ? _method.Invoke(null, [target])
             : _method.Invoke(null, [target, value]);

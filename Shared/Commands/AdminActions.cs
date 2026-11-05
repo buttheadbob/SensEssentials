@@ -51,7 +51,7 @@ public sealed class AdminActions(ICommandContext context) : CommandActions(conte
         foreach (var player in players)
         {
             sb.AppendLine($"{player.DisplayName}");
-            sb.AppendLine($">PlayerId: {player.Identity.IdentityId}");
+            sb.AppendLine($">PlayerId: {player.Identity?.IdentityId}");
             sb.AppendLine($">SteamId: {player.Id.SteamId}");
         }
 
@@ -101,23 +101,29 @@ public sealed class AdminActions(ICommandContext context) : CommandActions(conte
         var items = preset.Items.ToList();
         Context.Respond($"Running block preset '{name}' ({items.Count} items)...");
 
-        Task.Run(() =>
+        RunInOrder($"Block preset '{name}'", [.. items
+            .Where(item => !string.IsNullOrWhiteSpace(item.Value))
+            .Select(item => (preset.GetCommand(action, item), item.DelaySpan))]);
+    }
+
+    /// <summary>
+    /// Runs commands one at a time on the game thread, waiting in the background in between.
+    /// </summary>
+    private static void RunInOrder(string source, List<(string Command, TimeSpan Delay)> steps)
+    {
+        Task.Run(async () =>
         {
             try
             {
-                foreach (var item in items)
+                foreach (var (command, delay) in steps)
                 {
-                    if (string.IsNullOrWhiteSpace(item.Value))
-                        continue;
-
-                    var command = preset.GetCommand(action, item);
-                    GameThread.InvokeSafe(() => EssentialsCore.Host.RunCommand(command));
-                    System.Threading.Thread.Sleep(item.DelaySpan);
+                    GameThread.InvokeSafe(() => EssentialsCore.RunCommand(command, source));
+                    await Task.Delay(delay);
                 }
             }
             catch (Exception e)
             {
-                Log.Error(e, $"Block preset '{name}' failed");
+                Log.Error(e, $"{source} failed");
             }
         });
     }
@@ -141,29 +147,14 @@ public sealed class AdminActions(ICommandContext context) : CommandActions(conte
         {
             var commands = preset.GetCommands();
             foreach (var command in commands)
-                EssentialsCore.Host.RunCommand(command);
+                EssentialsCore.RunCommand(command, $"Cleanup preset '{name}'");
             Context.Respond($"Ran cleanup preset '{name}' ({commands.Count} commands).");
         }
         else
         {
             var targets = preset.Targets.ToList();
             Context.Respond($"Running cleanup preset '{name}' ({targets.Count} targets)...");
-            Task.Run(() =>
-            {
-                try
-                {
-                    foreach (var target in targets)
-                    {
-                        var command = preset.BuildCommand(target);
-                        GameThread.InvokeSafe(() => EssentialsCore.Host.RunCommand(command));
-                        System.Threading.Thread.Sleep(target.DelaySpan);
-                    }
-                }
-                catch (Exception e)
-                {
-                    Log.Error(e, $"Cleanup preset '{name}' failed");
-                }
-            });
+            RunInOrder($"Cleanup preset '{name}'", [.. targets.Select(target => (preset.BuildCommand(target), target.DelaySpan))]);
         }
     }
 
@@ -202,12 +193,12 @@ public sealed class AdminActions(ICommandContext context) : CommandActions(conte
 
     public void ListAuto()
     {
-        ShowAutoCommands(EssentialsCore.Config.AutoCommands.ToList(), "No auto commands configured");
+        ShowAutoCommands([.. EssentialsCore.Config.AutoCommands], "No auto commands configured");
     }
 
     public void ListAutoRunning()
     {
-        ShowAutoCommands(EssentialsCore.Config.AutoCommands.Where(x => x.IsRunning()).ToList(), "No active autocommand found");
+        ShowAutoCommands([.. EssentialsCore.Config.AutoCommands.Where(x => x.IsRunning())], "No active autocommand found");
     }
 
     private void ShowAutoCommands(List<AutoCommand> commands, string empty)
@@ -226,10 +217,23 @@ public sealed class AdminActions(ICommandContext context) : CommandActions(conte
         Show("Current AutoCommands", $"Found {commands.Count} Commands", sb.ToString());
     }
 
+    /// <summary>
+    /// The Steam id of an online or offline player, or the id itself when it was given. 0 when neither fits.
+    /// </summary>
+    private static ulong ResolveSteamId(string nameOrId)
+    {
+        if (Utilities.GetPlayerByNameOrId(nameOrId) is { } online)
+            return online.SteamUserId;
+
+        if (Utilities.GetIdentityByNameOrIds(nameOrId) is { } identity && Utilities.GetSteamId(identity.IdentityId) is var steamId and not 0)
+            return steamId;
+
+        return ulong.TryParse(nameOrId, out var id) ? id : 0;
+    }
+
     public void SetRank(string playerNameOrId, string rank)
     {
-        ulong.TryParse(playerNameOrId, out var id);
-        id = Utilities.GetPlayerByNameOrId(playerNameOrId)?.SteamUserId ?? id;
+        var id = ResolveSteamId(playerNameOrId);
 
         if (id == 0)
         {
@@ -258,8 +262,7 @@ public sealed class AdminActions(ICommandContext context) : CommandActions(conte
 
     public void ReserveSlot(string playerNameOrId)
     {
-        ulong.TryParse(playerNameOrId, out var id);
-        id = Utilities.GetPlayerByNameOrId(playerNameOrId)?.SteamUserId ?? id;
+        var id = ResolveSteamId(playerNameOrId);
 
         if (id == 0)
         {
@@ -280,8 +283,7 @@ public sealed class AdminActions(ICommandContext context) : CommandActions(conte
 
     public void UnreserveSlot(string playerNameOrId)
     {
-        ulong.TryParse(playerNameOrId, out var id);
-        id = Utilities.GetPlayerByNameOrId(playerNameOrId)?.SteamUserId ?? id;
+        var id = ResolveSteamId(playerNameOrId);
 
         if (id == 0)
         {
@@ -342,17 +344,31 @@ public sealed class AdminActions(ICommandContext context) : CommandActions(conte
                 Context.Respond("Player not found");
                 return;
             }
+
+            if (p.Character == null)
+            {
+                Context.Respond($"{p.DisplayName} has no character to give items to.");
+                return;
+            }
+
             Sandbox.Game.MyVisualScriptLogicProvider.AddToPlayersInventory(p.IdentityId, defID, quantity);
             Notify.Player(p.SteamUserId, message);
+            Context.Respond("Item(s) given!");
         }
         else
         {
+            int given = 0;
             foreach (var p in Utilities.GetOnlinePlayers())
             {
+                // Players without a character have no inventory, and the game skips them silently.
+                if (p.Identity?.Character == null)
+                    continue;
+
                 Sandbox.Game.MyVisualScriptLogicProvider.AddToPlayersInventory(p.Identity.IdentityId, defID, quantity);
                 Notify.Player(p.Id.SteamId, message);
+                given++;
             }
+            Context.Respond($"Item(s) given to {given} player(s).");
         }
-        Context.Respond("Item(s) given!");
     }
 }

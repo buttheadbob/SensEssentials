@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using SensEssentials.Utils;
 using Sandbox.Game;
 using Sandbox.Game.Entities;
 using Sandbox.Game.GameSystems.BankingAndCurrency;
@@ -13,7 +12,6 @@ using Sandbox.Game.World;
 using Sandbox.Game.World.Generator;
 using Sandbox.ModAPI;
 using VRage.Game;
-using VRage.Game.ModAPI;
 
 namespace SensEssentials.Commands;
 
@@ -24,6 +22,9 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
 {
     public void CleanIdentities(int days, bool includeNpcs)
     {
+        if (!CheckDays(days))
+            return;
+
         var identities = GetInactiveIdentities(days, includeNpcs);
         if (identities.Count == 0)
         {
@@ -31,13 +32,17 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
             return;
         }
 
-        int grids = identities.Sum(identity => ResetIdentity(identity, removeIdentity: false));
-        RemoveEmptyFactions();
+        var owned = OwnedGroups();
+        int grids = identities.Sum(identity => ResetIdentity(identity, removeIdentity: false, owned));
+        CleanFaction_Internal();
         Context.Respond($"Reset {identities.Count} identities and deleted {grids} grids they owned.");
     }
 
     public void PurgeIdentities(int days, bool includeNpcs)
     {
+        if (!CheckDays(days))
+            return;
+
         var identities = GetInactiveIdentities(days, includeNpcs);
         if (identities.Count == 0)
         {
@@ -45,9 +50,19 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
             return;
         }
 
-        int grids = identities.Sum(identity => ResetIdentity(identity, removeIdentity: true));
-        RemoveEmptyFactions();
+        var owned = OwnedGroups();
+        int grids = identities.Sum(identity => ResetIdentity(identity, removeIdentity: true, owned));
+        CleanFaction_Internal();
         Context.Respond($"Removed {identities.Count} identities and {grids} grids they owned.");
+    }
+
+    private bool CheckDays(int days)
+    {
+        if (days >= 1)
+            return true;
+
+        Context.Respond("Days must be at least 1, or every offline player would match.");
+        return false;
     }
 
     public void ClearIdentity(string playername)
@@ -61,8 +76,12 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
             return;
         }
 
-        int grids = ResetIdentity(identity, removeIdentity: false);
-        RemoveEmptyFactions();
+        var steamId = MySession.Static.Players.TryGetSteamId(identity.IdentityId);
+        if (steamId != 0 && !CanActOn(steamId))
+            return;
+
+        int grids = ResetIdentity(identity, removeIdentity: false, OwnedGroups());
+        CleanFaction_Internal();
         Context.Respond($"Reset identity {identity.DisplayName} and deleted {grids} grids they owned.");
     }
 
@@ -73,12 +92,18 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
     private static List<MyIdentity> GetInactiveIdentities(int days, bool includeNpcs)
     {
         var cutoff = DateTime.Now - TimeSpan.FromDays(days);
-        return MySession.Static.Players.GetAllIdentities()
+        return [.. MySession.Static.Players.GetAllIdentities()
             .Where(identity => identity.LastLoginTime < cutoff)
             .Where(identity => !MySession.Static.Players.IsPlayerOnline(identity.IdentityId))
-            .Where(identity => includeNpcs || !Utils.Ownership.IsNpcIdentity(identity.IdentityId))
-            .ToList();
+            .Where(identity => includeNpcs || !Utils.Ownership.IsNpcIdentity(identity.IdentityId))];
     }
+
+    /// <summary>
+    /// Every grid group with its owners, worked out once so a command over many identities does not rescan all
+    /// blocks for each one.
+    /// </summary>
+    private static List<(List<MyCubeGrid> Group, HashSet<long> Owners)> OwnedGroups() =>
+        [.. GridFinder.GetAllGrids().Values.Select(group => (group, Utils.Ownership.GetAllOwnerIds(group)))];
 
     /// <summary>
     /// Returns an identity to a brand-new state: deletes grid groups it is the majority owner of (other owners'
@@ -86,14 +111,15 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
     /// clears its GPS, reputation and credits. When removeIdentity is set the identity itself is removed as well.
     /// Returns the number of grids deleted.
     /// </summary>
-    private static int ResetIdentity(MyIdentity identity, bool removeIdentity)
+    private static int ResetIdentity(MyIdentity identity, bool removeIdentity, List<(List<MyCubeGrid> Group, HashSet<long> Owners)> owned)
     {
         long id = identity.IdentityId;
         int deleted = 0;
 
-        foreach (var group in GridFinder.GetAllGrids().Values)
+        foreach (var (group, owners) in owned)
         {
-            if (!Utils.Ownership.GetAllOwnerIds(group).Contains(id))
+            // An earlier identity in the same command may have deleted this group already.
+            if (!owners.Contains(id) || group.All(g => g.MarkedForClose))
                 continue;
 
             long majority = Utils.Ownership.GetOwner(group);
@@ -124,8 +150,7 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
         if (!MySession.Static.Players.IsPlayerOnline(id) && identity.Character is { MarkedForClose: false } character)
             character.Close();
 
-        if (MySession.Static.Factions.GetPlayerFaction(id) != null)
-            MyVisualScriptLogicProvider.KickPlayerFromFaction(id);
+        LeaveFaction(id);
 
         var gpsApi = MyAPIGateway.Session.GPS;
         foreach (var gps in gpsApi.GetGpsList(id).ToList())
@@ -178,22 +203,7 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
             return;
         }
 
-        // Kick from a snapshot, since kicking changes the member list. The founder goes last so the faction
-        // always has a founder while other members remain.
-        var members = fac.Members.Keys.ToList();
-        var kickOrder = members.Where(m => m != fac.FounderId).ToList();
-        if (members.Contains(fac.FounderId))
-            kickOrder.Add(fac.FounderId);
-
-        foreach (var member in kickOrder)
-        {
-            if (MySession.Static.Factions.TryGetFactionById(fac.FactionId) == null)
-                break;
-            MyFactionCollection.KickMember(fac.FactionId, member);
-        }
-
-        if (MySession.Static.Factions.TryGetFactionById(fac.FactionId) != null)
-            RemoveFaction(fac);
+        RemoveWithMembers(fac);
         Context.Respond(MySession.Static.Factions.FactionTagExists(tag)
             ? $"{tag} removal failed"
             : $"{tag} removal successful");
@@ -201,7 +211,7 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
 
     public void FactionInfo()
     {
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new();
 
         foreach (KeyValuePair<long, MyFaction> factionId in MySession.Static.Factions)
         {
@@ -226,11 +236,6 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
         Show("Faction Info", null, sb.ToString());
     }
 
-    private static void RemoveEmptyFactions()
-    {
-        CleanFaction_Internal(1);
-    }
-
     private static int CleanFaction_Internal(int memberCount = 1)
     {
         int result = 0;
@@ -241,7 +246,6 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
                 continue;
 
             int validmembers = 0;
-            //O(2n)
             foreach (var member in faction.Value.Members)
             {
                 // Members whose identity no longer exists do not count.
@@ -257,67 +261,71 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
             if (validmembers >= memberCount)
                 continue;
 
-            RemoveFaction(faction.Value);
+            RemoveWithMembers(faction.Value);
             result++;
         }
 
         return result;
     }
 
-    private static bool RemoveFromFaction_Internal(MyIdentity identity)
-    {
-        var fac = MySession.Static.Factions.GetPlayerFaction(identity.IdentityId);
-        if (fac == null)
-            return false;
- 
-        /*
-         * VisualScriptLogicProvider takes care of removal of faction if last
-         * identity is kicked, and promotes the next player in line to Founder
-         * if the founder is being kicked.
-         *
-         * Factions must have a founder otherwise calls like MyFaction.Members.Keys will NRE.
-         */
-        MyVisualScriptLogicProvider.KickPlayerFromFaction(identity.IdentityId);
-
-        return true;
-    }
-        
-    private static MethodInfo? _factionChangeSuccessInfo = typeof(MyFactionCollection).GetMethod("FactionStateChangeSuccess", BindingFlags.NonPublic | BindingFlags.Static);
-        
-    //TODO: This should probably be moved into Torch base, but I honestly cannot be bothered <<-- Torch is fucked, don't touch torch.
     /// <summary>
-    /// Removes a faction from the server and all clients because Keen fucked up their own system.
+    /// The game removes the faction after its last member, and promotes the next member when the founder leaves.
     /// </summary>
-    /// <param name="faction"></param>
-    private static void RemoveFaction(MyFaction faction)
+    private static void LeaveFaction(long identityId)
     {
-        //bypass the check that says the server doesn't have permission to delete factions
-        //_applyFactionState(MySession.Static.Factions, MyFactionStateChange.RemoveFaction, faction.FactionId, faction.FactionId, 0L, 0L);
-        //MyMultiplayer.RaiseStaticEvent(s =>
-        //        (Action<MyFactionStateChange, long, long, long, long>) Delegate.CreateDelegate(typeof(Action<MyFactionStateChange, long, long, long, long>), _factionStateChangeReq),
-        //    MyFactionStateChange.RemoveFaction, faction.FactionId, faction.FactionId, faction.FounderId, faction.FounderId);
-        if (_factionChangeSuccessInfo != null)
-            Events.RaiseStaticEvent(_factionChangeSuccessInfo, MyFactionStateChange.RemoveFaction, faction.FactionId, faction.FactionId, 0L, 0L);
-        if(!MyAPIGateway.Session.Factions.FactionTagExists(faction.Tag)) return;
-        MyAPIGateway.Session.Factions.RemoveFaction(faction.FactionId); //Added to remove factions that got through the crack
+        if (MySession.Static.Factions.GetPlayerFaction(identityId) != null)
+            MyVisualScriptLogicProvider.KickPlayerFromFaction(identityId);
     }
+        
+    /// <summary>
+    /// Kicks everyone and then removes the faction, since removing it alone leaves its members linked to it in the save.
+    /// </summary>
+    private static void RemoveWithMembers(MyFaction faction)
+    {
+        // Kick from a snapshot, since kicking changes the member list. The founder goes last so the faction
+        // always has a founder while other members remain.
+        var members = faction.Members.Keys.ToList();
+        var kickOrder = members.Where(m => m != faction.FounderId).ToList();
+        if (members.Contains(faction.FounderId))
+            kickOrder.Add(faction.FounderId);
+
+        foreach (var member in kickOrder)
+        {
+            if (MySession.Static.Factions.TryGetFactionById(faction.FactionId) == null)
+                break;
+            MyFactionCollection.KickMember(faction.FactionId, member);
+        }
+
+        if (MySession.Static.Factions.TryGetFactionById(faction.FactionId) != null)
+            RemoveFaction(faction);
+    }
+
+    /// <summary>
+    /// Removes a faction from the server and all clients, along with its bank account.
+    /// </summary>
+    private static void RemoveFaction(MyFaction faction) => MyAPIGateway.Session.Factions.RemoveFaction(faction.FactionId);
 
     private static int FixBlockOwnership()
     {
         int count = 0;
         foreach (var entity in MyEntities.GetEntities())
         {
-            var grid = entity as MyCubeGrid;
-            if (grid == null)
+            if (entity is not MyCubeGrid grid)
                 continue;
             var owner = Utils.Ownership.GetOwner(grid);
+            if (!MySession.Static.Players.HasIdentity(owner))
+                owner = 0;
+
             var share = owner == 0 ? MyOwnershipShareModeEnum.All : MyOwnershipShareModeEnum.Faction;
-            foreach (var block in grid.GetFatBlocks())
+            foreach (var block in grid.GetFatBlocks().ToList())
             {
                 if (block.OwnerId == 0 || MySession.Static.Players.HasIdentity(block.OwnerId))
                     continue;
 
-                block.ChangeOwner(owner, share);
+                // Ownership can only move to or from nobody, so go through 0. The request also reaches clients.
+                block.ChangeBlockOwnerRequest(0, share);
+                if (owner != 0)
+                    block.ChangeBlockOwnerRequest(owner, share);
                 count++;
             }
         }
@@ -339,21 +347,19 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
         //find all identities owning a block
         foreach (var entity in MyEntities.GetEntities())
         {
-            var grid = entity as MyCubeGrid;
-            if (grid == null)
+            if (entity is not MyCubeGrid grid)
                 continue;
             validIdentities.UnionWith(Utils.Ownership.GetAllOwnerIds(grid));
         }
 
         foreach (var online in MySession.Static.Players.GetOnlinePlayers())
         {
-            validIdentities.Add(online.Identity.IdentityId);
+            if (online.Identity != null)
+                validIdentities.Add(online.Identity.IdentityId);
         }
 
-        //might not be necessary, but just in case
-        validIdentities.Remove(0);
 
-        //clean identities that don't own any blocks, or don't have a steam ID for whatever reason
+        // Remove identities that own no blocks. NPCs and identities with no name are kept.
         foreach (var identity in MySession.Static.Players.GetAllIdentities().ToList())
         {
             if (Utils.Ownership.IsNpcIdentity(identity.IdentityId)  || string.IsNullOrEmpty(identity.DisplayName))
@@ -367,10 +373,12 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
                 continue;
             }
 
-            RemoveFromFaction_Internal(identity);
+            LeaveFaction(identity.IdentityId);
+            // Removing an identity leaves its offline character in the world.
+            if (identity.Character is { MarkedForClose: false } character)
+                character.Close();
             MySession.Static.Players.TryGetPlayerId(identity.IdentityId, out MyPlayer.PlayerId playerId);
             MySession.Static.Players.RemoveIdentity(identity.IdentityId, playerId);
-            validIdentities.Remove(identity.IdentityId);
             count++;
         }
 
@@ -383,7 +391,7 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
         //cleanup reputations
         count += CleanupReputations();
 
-        //Keen, for the love of god why is everything about GPS internal.
+        // The game has no public list of who has GPS markers.
         var playerGpss = GpsDicField?.GetValue(MySession.Static.Gpss) as Dictionary<long, Dictionary<int, MyGps>>;
         if (playerGpss is not null)
         {
@@ -404,33 +412,6 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
         var f = SeedParamField?.GetValue(g) as HashSet<MyObjectSeedParams>;
         count += f?.Count ?? 0;
         f?.Clear();
-            
-        //TODO
-        /*
-        foreach (var history in MySession.Static.ChatHistory)
-        {
-            if (!validIdentities.Contains(history.Key))
-                idCache.Add(history.Key);
-        }
-
-        foreach (var id in idCache)
-        {
-            MySession.Static.ChatHistory.Remove(id);
-        }
-        count += idCache.Count;
-        idCache.Clear();
-
-        //delete chat history for deleted factions
-        for (int i = MySession.Static.FactionChatHistory.Count - 1; i >= 0; i--)
-        {
-            var history = MySession.Static.FactionChatHistory[i];
-            if (MySession.Static.Factions.TryGetFactionById(history.FactionId1) == null || MySession.Static.Factions.TryGetFactionById(history.FactionId2) == null)
-            {
-                count++;
-                MySession.Static.FactionChatHistory.RemoveAtFast(i);
-            }
-        }
-        */
             
         var cf = AllCamerasField?.GetValue(CamerasField?.GetValue(MySession.Static)) as Dictionary<MyPlayer.PlayerId, Dictionary<long, MyEntityCameraSettings>>;
         count += cf?.Count ?? 0;
@@ -491,8 +472,7 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
         //find all identities owning a block
         foreach (var entity in MyEntities.GetEntities())
         {
-            var grid = entity as MyCubeGrid;
-            if (grid == null)
+            if (entity is not MyCubeGrid grid)
                 continue;
             validIdentities.UnionWith(Utils.Ownership.GetAllOwnerIds(grid));
         }
@@ -500,7 +480,8 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
         //find online identities
         foreach (var online in MySession.Static.Players.GetOnlinePlayers())
         {
-            validIdentities.Add(online.Identity.IdentityId);
+            if (online.Identity != null)
+                validIdentities.Add(online.Identity.IdentityId);
         }
 
         foreach (var identity in MySession.Static.Players.GetAllIdentities().ToList())
@@ -517,8 +498,6 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
             validIdentities.Add(faction.Key);
         }
 
-        //might not be necessary, but just in case
-        validIdentities.Remove(0);
         var result = 0;
 
         var collection0List = collection?.Keys.ToList();
@@ -542,8 +521,6 @@ public sealed class WorldActions(ICommandContext context) : CommandActions(conte
                 result++;
             }
 
-        //_relationsSet.Invoke(MySession.Static.Factions,collection);
-        //_playerRelationsSet.Invoke(MySession.Static.Factions,collection2);
         return result;
     }
 }

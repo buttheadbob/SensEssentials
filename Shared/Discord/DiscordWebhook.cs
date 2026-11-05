@@ -31,7 +31,10 @@ internal enum SendResult
 {
     Sent,
     RateLimited,
-    Failed
+    Failed,
+
+    /// <summary>The webhook was deleted, or its URL is wrong. Trying again will not help.</summary>
+    Gone
 }
 
 /// <summary>
@@ -61,7 +64,10 @@ internal static class DiscordWebhook
 
             var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if ((int)response.StatusCode != 429)
-                return (SendResult.Failed, $"{(int)response.StatusCode} {response.StatusCode}: {Shorten(body, 300)}");
+            {
+                var gone = (int)response.StatusCode is 401 or 403 or 404;
+                return (gone ? SendResult.Gone : SendResult.Failed, $"{(int)response.StatusCode} {response.StatusCode}: {Shorten(body, 300)}");
+            }
 
             if (attempt == 1)
                 return (SendResult.RateLimited, "Discord is still rate limiting this webhook.");
@@ -102,7 +108,8 @@ internal static class DiscordWebhook
         if (!string.IsNullOrEmpty(message.Content))
             payload["content"] = message.Content;
 
-        var json = payload.ToString(Formatting.None);
+        // Not ToString(Formatting): that overload is missing from the Newtonsoft version Magnetar Interim runs on.
+        var json = JsonConvert.SerializeObject(payload);
         if (string.IsNullOrEmpty(message.AttachmentText))
             return new StringContent(json, Encoding.UTF8, "application/json");
 

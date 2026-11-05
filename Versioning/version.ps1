@@ -13,6 +13,8 @@ if (Test-Path $versionFile) {
         $minor = [int]$match.Groups[2].Value
         $patch = [int]$match.Groups[3].Value
         $build = [int]$match.Groups[4].Value
+    } else {
+        throw "Could not read the version from $versionFile"
     }
 }
 $build++

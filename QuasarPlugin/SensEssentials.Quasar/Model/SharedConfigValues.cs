@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -14,7 +13,6 @@ public sealed class SharedConfigValues
     public bool UtilityShowPosition { get; set; }
     public bool MarkerShowPosition { get; set; }
     public int BackpackLimit { get; set; } = 1;
-    public bool CutGameTags { get; set; }
 
     // MOTD
     public string Motd { get; set; } = "";
@@ -166,7 +164,7 @@ public sealed class SharedConfigValues
     }
 
     internal static bool IsTime(string? text) =>
-        TimeSpan.TryParse(text, CultureInfo.InvariantCulture, out var span) && span >= TimeSpan.Zero;
+        TimeFormat.TryParse(text, out _);
 }
 
 public sealed class AutoCommandValues
@@ -188,16 +186,20 @@ public sealed class AutoCommandValues
     {
         if (string.IsNullOrWhiteSpace(Name))
             return "Give it a name.";
-        // Sens Essentials keeps running commands by name, so two with one name would share a schedule.
-        if (all.Count(c => c.Name == Name) > 1)
+        // Commands are found by name in any case, so the second of two with one name could never be run or voted on.
+        if (all.Count(c => string.Equals(c.Name, Name, StringComparison.OrdinalIgnoreCase)) > 1)
             return "Another auto command has the same name.";
         if (Trigger != Trigger.Disabled && Trigger != Trigger.SimSpeed && Trigger != Trigger.OnStart && !SharedConfigValues.IsTime(Interval))
             return "Interval must be HH:MM:SS.";
         if (Trigger is Trigger.Timed or Trigger.GridCount or Trigger.PlayerCount or Trigger.Vote
-            && TimeSpan.TryParse(Interval, CultureInfo.InvariantCulture, out var interval) && interval == TimeSpan.Zero)
-            return "Interval must be longer than 00:00:00.";
+            && TimeFormat.TryParse(Interval, out var interval) && interval < TimeSpan.FromSeconds(1))
+            return "Interval must be at least 1 second. This command will not run until it is.";
+        if (Trigger == Trigger.Scheduled && TimeFormat.TryParse(Interval, out var timeOfDay) && timeOfDay >= TimeSpan.FromDays(1))
+            return "Time of day must be below 24:00:00.";
         if (Trigger == Trigger.SimSpeed)
         {
+            if (Compare == Gtl.Equal)
+                return "Sim speed needs LessThan or GreaterThan.";
             if (TriggerRatio <= 0 || TriggerRatio > 1)
                 return "Ratio must be between 0 and 1.";
             if (!SharedConfigValues.IsTime(SimSpeedDuration) || !SharedConfigValues.IsTime(SimSpeedCooldown))
@@ -251,6 +253,9 @@ public sealed class BlockPresetValues
     public List<BlockPresetItemValues> Items { get; set; } = [];
     public List<BlockPresetConditionValues> Conditions { get; set; } = [];
 
+    public string? Warning() =>
+        Conditions.Any(c => ConditionNotes.IsOwnedByNobody(c.Condition.ToCommandString(), c.Parameter)) ? ConditionNotes.OwnedByNobody : null;
+
     // Same checks as Shared\Config\BlockList.cs
     public string? Problem()
     {
@@ -293,6 +298,12 @@ public sealed class CleanupPresetValues
     public List<CleanupTargetValues> Targets { get; set; } = [];
     public List<CleanupConditionValues> Conditions { get; set; } = [];
 
+    public string? Warning() =>
+        Conditions.Any(c => ConditionNotes.IsOwnedByNobody(c.Condition.ToCommandString(), c.Parameter))
+        || (!ApplyToAll && Targets.Any(t => ConditionNotes.IsOwnedByNobody(t.Condition.ToCommandString(), t.Parameter)))
+            ? ConditionNotes.OwnedByNobody
+            : null;
+
     // Same checks as Shared\Config\CleanupPreset.cs
     public string? Problem()
     {
@@ -323,14 +334,14 @@ public sealed class CleanupPresetValues
 
 public sealed class CleanupTargetValues
 {
-    public CleanupConditionType Condition { get; set; }
+    public ConditionType Condition { get; set; }
     public string Parameter { get; set; } = "";
     public string Delay { get; set; } = "00:00:00";
 }
 
 public sealed class CleanupConditionValues
 {
-    public CleanupConditionType Condition { get; set; }
+    public ConditionType Condition { get; set; }
     public string Parameter { get; set; } = "";
 }
 
@@ -339,8 +350,8 @@ public sealed class DiscordHandlerValues
     public string Name { get; set; } = "";
     public bool Enabled { get; set; } = true;
     public string WebhookUrl { get; set; } = "";
-    public DiscordLogLevel MinLevel { get; set; } = DiscordLogLevel.Warn;
-    public DiscordLogLevel MaxLevel { get; set; } = DiscordLogLevel.Fatal;
+    public EssentialsLogLevel MinLevel { get; set; } = EssentialsLogLevel.Warn;
+    public EssentialsLogLevel MaxLevel { get; set; } = EssentialsLogLevel.Fatal;
     public string LoggerNames { get; set; } = "";
     public string IgnoredLoggerNames { get; set; } = "";
     public string RolePings { get; set; } = "";

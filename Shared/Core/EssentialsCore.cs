@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using VRageMath;
 
 // Engine neutral core, compiled into BOTH the Torch plugin and the Magnetar plugin.
@@ -25,8 +26,6 @@ public interface IEssentialsHost
     /// </summary>
     bool IsServerRunning { get; }
 
-    void SaveConfig();
-
     void Log(EssentialsLogLevel level, string channel, string message, Exception? exception);
 
     /// <summary>
@@ -47,6 +46,17 @@ public interface IEssentialsHost
     void SendChat(string? author, string message, Color? color = null, ulong targetSteamId = 0);
 
     /// <summary>
+    /// Turns text into one command argument. Hosts read quotes and backslashes differently, so a preset's regex
+    /// has to be quoted by the host that will read it.
+    /// </summary>
+    string QuoteArgument(string text);
+
+    /// <summary>
+    /// True when <see cref="NotifyVoxelsReset"/> reaches connected players.
+    /// </summary>
+    bool CanReloadVoxels { get; }
+
+    /// <summary>
     /// Tells clients that these voxel maps were reset, so they reload them. Hosts without a client mod do nothing.
     /// </summary>
     void NotifyVoxelsReset(long[] entityIds);
@@ -54,27 +64,55 @@ public interface IEssentialsHost
 
 public static class EssentialsCore
 {
-    public const string Name = "Sens Essentials";
+    private static IEssentialsHost? _host;
 
     /// <summary>
-    /// Set by the host plugin in Init, before any command, patch or timer can run.
+    /// Runs a command as the server. Nobody sees the reply of an auto command or preset step, so a line that
+    /// is not a command goes to the log. Replies go to the log through the host.
     /// </summary>
-    public static IEssentialsHost Host { get; set; } = null!;
+    public static void RunCommand(string command, string source)
+    {
+        var line = command.Trim();
+        if (!line.StartsWith("!"))
+            line = "!" + line;
+
+        if (!Host.RunCommand(line))
+            Log.Error($"{source}: '{line}' could not run. Check the spelling.");
+    }
+
+    /// <summary>
+    /// Keeps a config that could not be read. Hosts load defaults after this and overwrite the file at the next
+    /// save, which would lose everything in it over one bad value.
+    /// </summary>
+    public static void KeepBadConfig(string path, Exception reason)
+    {
+        try
+        {
+            var copy = $"{path}.bad-{DateTime.Now:yyyyMMdd-HHmmss}";
+            File.Copy(path, copy, true);
+            Log.Error(reason, $"Could not read {path}, so defaults are in use. The file was kept as {copy}. Fix it and copy it back.");
+        }
+        catch (Exception e)
+        {
+            Log.Error(e, $"Could not keep a copy of the unreadable config {path}");
+        }
+    }
+
+    /// <summary>
+    /// Set by the host plugin in Init, before any command or timer can run.
+    /// </summary>
+    public static IEssentialsHost Host
+    {
+        get => _host ?? throw new InvalidOperationException("Used before the host plugin finished starting.");
+        set => _host = value;
+    }
+
+    /// <summary>
+    /// For code that can run before the host is set, such as logging.
+    /// </summary>
+    public static IEssentialsHost? HostOrNull => _host;
 
     public static EssentialsConfig Config => Host.Config;
-}
-
-/// <summary>
-/// Log levels in NLog's order, so (int)level equals NLog's LogLevel.Ordinal.
-/// </summary>
-public enum EssentialsLogLevel
-{
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-    Fatal
 }
 
 /// <summary>
@@ -90,8 +128,6 @@ public static class Log
 
     public static void Warn(string message) => Write(EssentialsLogLevel.Warn, Channel, message, null);
 
-    public static void Warn(Exception exception, string message) => Write(EssentialsLogLevel.Warn, Channel, message, exception);
-
     public static void Error(string message) => Write(EssentialsLogLevel.Error, Channel, message, null);
 
     public static void Error(Exception exception, string message) => Write(EssentialsLogLevel.Error, Channel, message, exception);
@@ -100,7 +136,7 @@ public static class Log
     {
         try
         {
-            EssentialsCore.Host?.Log(level, channel, message, exception);
+            EssentialsCore.HostOrNull?.Log(level, channel, message, exception);
         }
         catch (Exception)
         {

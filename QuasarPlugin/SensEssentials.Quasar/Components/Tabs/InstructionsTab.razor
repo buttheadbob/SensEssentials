@@ -14,8 +14,10 @@
             case "Getting Started":
                 <h2>Welcome to Sens Essentials</h2>
                 <p>A shared config is one set of Sens Essentials settings that any number of servers can follow. Create a config, edit
-                    it on these tabs, choose its servers on the Servers tab, then click Save. Every server following it gets the
-                    change within seconds; servers that are offline get it as soon as they connect.</p>
+                    it on these tabs and click Save, then choose its servers on the Servers tab. Choosing a server replaces its own
+                    settings with the saved config right away, so you are asked to confirm first. After that, Save sends changes to
+                    every server following it within seconds; servers that are offline get it as soon as they connect. A message in
+                    the corner confirms what each server did.</p>
                 <p>While a server follows a shared config, changes made to Sens Essentials on that server's Plugins page are undone,
                     so the config stays the same everywhere. The server's General tab names the config it follows. Choose
                     "Configured on its own" on the Servers tab to edit a server by itself again; it keeps the settings it has.</p>
@@ -36,9 +38,11 @@
                     day-based commands.</p>
                 <h3>Editing</h3>
                 <ul>
-                    <li>Nothing reaches the servers until you click Save. Discard goes back to the saved config.</li>
+                    <li>Your edits reach the servers when you click Save. Discard goes back to the saved config.</li>
+                    <li>Choosing a config for a server on the Servers tab sends the saved config right away, once you confirm.</li>
                     <li>After removing anything (a preset, a step, a handler...), click Undo at the bottom to put it back.</li>
-                    <li>Time fields use HH:MM:SS. A field that cannot be read turns red.</li>
+                    <li>Time fields use HH:MM:SS, or D:HH:MM:SS with days in front: 1:00:00:00 and 24:00:00 are both one day. The
+                        smallest step is 1 second. A field that cannot be read turns red.</li>
                     <li>A ⚠ next to an item means something needs attention. Select it to see what.</li>
                 </ul>
                 break;
@@ -100,12 +104,17 @@
                 </ol>
                 <p>Run it with !admin runpreset "Disable Drills", or as an auto command step.</p>
                 <h2>Cleanup Presets</h2>
-                <p>Delete grids by name, owner, power, distance from players and many other conditions. !cleanup help lists them in game.</p>
+                <p>Delete grids by name, owner, power, distance from players and many other conditions. !cleanup conditions lists them in game.</p>
                 <ul>
                     <li>Targets say what you are looking for. Each target runs as its own !cleanup delete.</li>
                     <li>Conditions are added to every target.</li>
                     <li>Apply To All runs once with only the conditions.</li>
                     <li>Delete Floating Objects as the action removes loose floating items and needs nothing else.</li>
+                    <li>OwnedBy asks whether ANY block belongs to that owner. HasOwnerType asks who the MAJORITY owner is. Both take npc,
+                        nobody, player or pirates in upper or lower case, and OwnedBy also takes a player name or IdentityId.</li>
+                    <li>OwnedBy nobody is the one exception: it means no block has an owner at all. A preset using it shows a ⚠ warning,
+                        because deleting is permanent. HasOwnerType nobody also matches ships whose owner's identity was deleted.</li>
+                    <li>A condition naming a block or player that does not exist stops the whole command, and nothing is deleted.</li>
                 </ul>
                 <p>Run it with !admin runcleanup "Dead Grids", or as an auto command step to clean up on a schedule. If any condition is
                     unknown, missing its parameter or has a parameter that cannot be read, nothing is deleted and the reason is shown.</p>
@@ -124,7 +133,7 @@
                 <ul>
                     <li>Logger filters: "only these" and "never these" loggers, comma separated; end a name with * to match by prefix.</li>
                     <li>Pings: the role and user IDs listed are pinged with every entry the handler sends.</li>
-                    <li>Rate limit: each webhook posts at most this many entries a second; the rest are dropped and counted.</li>
+                    <li>Rate limit: each webhook posts at most this many entries a second; the rest are dropped and counted. A webhook that no longer exists is skipped for 10 minutes.</li>
                     <li>Long errors: stack traces longer than the limit, and errors with inner exceptions, are attached as log.txt.</li>
                 </ul>
                 break;

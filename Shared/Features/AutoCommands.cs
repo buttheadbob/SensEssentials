@@ -1,10 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
-using System.Timers;
-using Timer = System.Timers.Timer;
-using Sandbox;
 using Sandbox.Game.World;
 using Sandbox.Game.Entities;
 using VRage.Game.ModAPI;
@@ -13,42 +9,30 @@ using static SensEssentials.Gtl;
 
 namespace SensEssentials;
 
-public class AutoCommands : IDisposable
+public class AutoCommands() : GameThreadTimer("auto commands")
 {
-    private static AutoCommands _instance = null!;
-    public static AutoCommands Instance => _instance ?? (_instance = new AutoCommands());
-    private Timer? _timer;
-    private int _tickQueued;
+    private static AutoCommands? _instance;
+    public static AutoCommands Instance => _instance ??= new AutoCommands();
+    private bool _startCommandsDone;
 
-    public void Start()
+    public override void Stop()
     {
-        if (_timer != null)
-            return;
-
-        _timer = new Timer(1000);
-        _timer.Elapsed += TimerElapsed;
-        _timer.AutoReset = true;
-        _timer.Start();
-    }
-
-    public void Stop()
-    {
-        _timer?.Dispose();
-        _timer = null;
+        base.Stop();
+        _startCommandsDone = false;
     }
 
     private bool CanRun(AutoCommand command)
     {
-        if (MySession.Static?.Ready != true) return false;
+        if (MySession.Static?.Ready != true || command.IsBlocked()) return false;
 
         switch (command.CommandTrigger)
         {
             case Trigger.Disabled:
                 return  false;
             case Trigger.OnStart:
-                if (command.Completed || command.IsRunning())break;
-                command.Completed = true;
-                command.RunNow();
+                // Only the first tick of a session, so one added or renamed later waits for the next start.
+                if (!_startCommandsDone)
+                    command.RunNow();
                 break;
             case Trigger.Vote:
                 break;
@@ -57,29 +41,12 @@ public class AutoCommands : IDisposable
             case Trigger.Scheduled:
                 return true;
             case Trigger.GridCount:
-                var gridCount = MyEntities.GetEntities().OfType<IMyCubeGrid>().Count();
-                switch (command.Compare)
-                {
-                    case GreaterThan:
-                        return gridCount > command.TriggerCount;
-                    case LessThan:
-                        return gridCount < command.TriggerCount;
-                    case Equal:
-                        return Math.Abs(gridCount-command.TriggerCount)<1;
-                    default:
-                        return false;
-                }
+                if (command.IsCheckDue() && Matches(command, MyEntities.GetEntities().OfType<IMyCubeGrid>().Count()))
+                    command.RunIfIdle();
+                break;
             case Trigger.PlayerCount:
-
-                switch (command.Compare)
-                {
-                    case GreaterThan:
-                        return Utilities.GetOnlinePlayerCount() > command.TriggerCount;
-                    case LessThan:
-                        return Utilities.GetOnlinePlayerCount() < command.TriggerCount;
-                    case Equal:
-                        return Math.Abs(Utilities.GetOnlinePlayerCount() - command.TriggerCount) < 1;
-                }
+                if (command.IsCheckDue() && Matches(command, Utilities.GetOnlinePlayerCount()))
+                    command.RunIfIdle();
                 break;
 
             case Trigger.SimSpeed:
@@ -93,46 +60,21 @@ public class AutoCommands : IDisposable
     }
 
 
-    private void TimerElapsed(object? sender, ElapsedEventArgs e)
+    private static bool Matches(AutoCommand command, double count) => command.Compare switch
     {
-        // Run the check on the game thread, where entities, players and commands are safe to use.
-        // Skip this tick if the previous one has not been processed yet.
-        if (Interlocked.Exchange(ref _tickQueued, 1) == 1)
-            return;
+        GreaterThan => count > command.TriggerCount,
+        LessThan => count < command.TriggerCount,
+        Equal => Math.Abs(count - command.TriggerCount) < 1,
+        _ => false,
+    };
 
-        try
-        {
-            MySandboxGame.Static.Invoke(() =>
-            {
-                try
-                {
-                    Tick();
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "Error encountered during autocommand update!");
-                }
-                finally
-                {
-                    Interlocked.Exchange(ref _tickQueued, 0);
-                }
-            }, "SensEssentials AutoCommands");
-        }
-        catch (Exception ex)
-        {
-            // The game is shutting down; let the next tick try again.
-            Interlocked.Exchange(ref _tickQueued, 0);
-            Log.Debug($"Could not queue autocommand update: {ex.Message}");
-        }
-    }
-
-    private void Tick()
+    protected override void Tick()
     {
         AutoCommand[] commands;
         try
         {
             // Snapshot, since the UI can edit the list at any time.
-            commands = EssentialsCore.Config.AutoCommands.ToArray();
+            commands = [.. EssentialsCore.Config.AutoCommands];
         }
         catch (Exception)
         {
@@ -153,10 +95,9 @@ public class AutoCommands : IDisposable
                 Log.Error(ex, "Error encountered during autocommand update!");
             }
         }
+
+        if (MySession.Static?.Ready == true)
+            _startCommandsDone = true;
     }
 
-    public void Dispose()
-    {
-        Stop();
-    }
 }

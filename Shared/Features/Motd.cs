@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Linq;
 using Sandbox.Game;
 using Sandbox.Game.World;
 using Sandbox.Graphics.GUI;
@@ -18,8 +16,15 @@ public static class Motd
 {
     public const string KnownIdsFileName = "SensEssentials.KnownSteamIds.txt";
 
-    // Players who already got the MOTD this connection. Only touched on the game thread.
+    private static readonly TimeSpan WaitLimit = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(1);
+
+    // Everything below is only touched on the game thread.
+    // Players who already got the MOTD this connection.
     private static readonly HashSet<ulong> ShownThisConnection = [];
+    // Players still waiting for a character, and when to give up on them.
+    private static readonly Dictionary<ulong, DateTime> Waiting = [];
+    private static DateTime _nextCheck;
     private static KnownIdsStorage? _knownIds;
 
     public static void Init(string storageDir)
@@ -28,50 +33,50 @@ public static class Motd
         _knownIds.Read();
     }
 
-    public static void Clear() => ShownThisConnection.Clear();
+    public static void Clear()
+    {
+        ShownThisConnection.Clear();
+        Waiting.Clear();
+    }
 
-    public static void OnPlayerLeft(ulong steamId) => ShownThisConnection.Remove(steamId);
+    public static void OnPlayerLeft(ulong steamId)
+    {
+        ShownThisConnection.Remove(steamId);
+        Waiting.Remove(steamId);
+    }
 
-    /// <summary>
-    /// Waits in the background until the player has a character, then shows the MOTD on the game thread.
-    /// </summary>
     public static void OnPlayerJoined(ulong steamId)
     {
-        //TODO: there is no player spawned event, so this polls. It gives up after five minutes.
-        Task.Run(() =>
+        // Update checks once a second for the character. It gives up after five minutes.
+        Waiting[steamId] = DateTime.UtcNow + WaitLimit;
+    }
+
+    /// <summary>
+    /// Every game tick. Once a second, shows the MOTD to any waiting player who now has a character.
+    /// </summary>
+    public static void Update()
+    {
+        if (Waiting.Count == 0 || DateTime.UtcNow < _nextCheck)
+            return;
+
+        _nextCheck = DateTime.UtcNow + CheckInterval;
+        var players = MySession.Static?.Players;
+        if (players == null)
+            return;
+
+        foreach (var pair in Waiting.ToArray())
         {
-            try
+            if (!players.TryGetPlayerById(new MyPlayer.PlayerId(pair.Key, 0), out MyPlayer p) || p.Character == null)
             {
-                var start = DateTime.Now;
-                var timeout = TimeSpan.FromMinutes(5);
-                var pid = new MyPlayer.PlayerId(steamId, 0);
-                while (DateTime.Now - start <= timeout)
-                {
-                    var players = MySession.Static?.Players;
-                    if (players == null)
-                        return;
-
-                    if (!players.TryGetPlayerById(pid, out MyPlayer p) || p.Character == null)
-                    {
-                        Thread.Sleep(1000);
-                        continue;
-                    }
-
-                    GameThread.InvokeSafe(() =>
-                    {
-                        if (!ShownThisConnection.Add(steamId))
-                            return;
-
-                        Send(p, true);
-                    });
-                    break;
-                }
+                if (DateTime.UtcNow > pair.Value)
+                    Waiting.Remove(pair.Key);
+                continue;
             }
-            catch (Exception e)
-            {
-                Log.Error(e, $"Failed to send the MOTD to {steamId}");
-            }
-        });
+
+            Waiting.Remove(pair.Key);
+            if (ShownThisConnection.Add(pair.Key))
+                Send(p, true);
+        }
     }
 
     public static void Send(MyPlayer player, bool onSessionChanged)
@@ -82,6 +87,13 @@ public static class Motd
             return;
 
         long playerId = identity.IdentityId;
+        var id = player.Client.SteamUserId;
+        if (id <= 0) return;
+
+        // First, so a player who only ever sees the URL is still known as seen.
+        bool isNewUser = _knownIds != null && !_knownIds.Contains(id);
+        if (isNewUser)
+            _knownIds!.Add(id);
 
         if (!string.IsNullOrEmpty(config.MotdUrl) && !config.NewUserMotdUrl)
         {
@@ -89,14 +101,7 @@ public static class Motd
             return;
         }
 
-        var id = player.Client.SteamUserId;
-        if (id <= 0) return;
-
         string name = identity.DisplayName ?? "player";
-
-        bool isNewUser = _knownIds != null && !_knownIds.Contains(id);
-        if (isNewUser)
-            _knownIds!.Add(id);
 
         if (!string.IsNullOrEmpty(config.MotdUrl) && isNewUser && config.NewUserMotdUrl)
         {
@@ -132,18 +137,14 @@ public static class Motd
     public static string MakeUrl(string url)
     {
         if (MyGuiSandbox.IsUrlWhitelisted(url)) return url;
-        return $"https://steamcommunity.com/linkfilter/?url={url}";
+        return $"https://steamcommunity.com/linkfilter/?url={Uri.EscapeDataString(url)}";
     }
 
     private static string GetDefaultMotdText()
     {
         try
         {
-            var motdDataStruct = typeof(MySpaceRespawnComponent).GetNestedType("MOTDData", BindingFlags.NonPublic)!;
-            var motdConstructFunc = motdDataStruct.GetMethod("Construct", BindingFlags.Public | BindingFlags.Static)!;
-            var motdMessageField = motdDataStruct.GetField("Message", BindingFlags.Public | BindingFlags.Instance)!;
-            var motd = motdConstructFunc.Invoke(null, []);
-            return motdMessageField.GetValue(motd) as string ?? "";
+            return MySpaceRespawnComponent.MOTDData.Construct().Message ?? "";
         }
         catch (Exception e)
         {

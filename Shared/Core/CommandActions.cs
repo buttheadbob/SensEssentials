@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Sandbox.Game.World;
 using VRage.Game.ModAPI;
 
 namespace SensEssentials;
@@ -15,7 +16,7 @@ public interface ICommandContext
     IReadOnlyList<string> Args { get; }
 
     /// <summary>
-    /// Everything after the command path, as typed.
+    /// Everything after the command path: as typed on Torch, the words joined by spaces on Magnetar.
     /// </summary>
     string RawArgs { get; }
 
@@ -43,6 +44,23 @@ public abstract class CommandActions
     }
 
     protected ICommandContext Context { get; }
+
+    /// <summary>
+    /// Authority flows down: a player can act on their own rank or below, never above. So an Admin can remove a
+    /// bad Admin but not an Owner. The server itself (console, auto commands) can act on anyone.
+    /// </summary>
+    public bool CanActOn(ulong steamId)
+    {
+        if (Context.Player == null)
+            return true;
+
+        var session = MySession.Static;
+        if (session.GetUserPromoteLevel(steamId) <= session.GetUserPromoteLevel(Context.Player.SteamUserId))
+            return true;
+
+        Context.Respond("That player outranks you.");
+        return false;
+    }
 
     /// <summary>
     /// Shows the text in a dialog to the calling player, or replies in chat when called from the console or when

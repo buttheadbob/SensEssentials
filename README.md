@@ -4,10 +4,10 @@ Must-have utilities and administration tools for Space Engineers dedicated serve
 presets, MOTD, voting, economy, teleporting, Discord logging, suit refill and more. Built for two plugin loaders from
 one code base:
 
-| Build | Loader | Project | Patching | Config |
-|---|---|---|---|---|
-| Torch | Torch for the Dedicated Server | `TorchPlugin` (.NET Framework 4.8) | Torch's PatchManager | WPF tab + `SensEssentials.cfg` |
-| Magnetar | Magnetar (Legacy .NET 4.8, Interim .NET 10), managed by Quasar | `ServerPlugin` (`net48;net10.0`) | Harmony | Quasar renders it from the PluginSdk attributes |
+| Build | Loader | Project | Config |
+|---|---|---|---|
+| Torch | Torch for the Dedicated Server | `TorchPlugin` (.NET Framework 4.8) | WPF tab + `SensEssentials.cfg` |
+| Magnetar | Magnetar (Legacy .NET 4.8, Interim .NET 10), managed by Quasar | `ServerPlugin` (`net48;net10.0`) | Quasar renders it from the PluginSdk attributes |
 
 The optional Quasar plugin (`QuasarPlugin/`) adds shared configs for admins with several Magnetar servers: one config,
 edited in a Torch-like editor inside Quasar, that Quasar keeps applied on every server following it. See
@@ -20,9 +20,9 @@ Shared/          engine neutral code, compiled into both plugins (game assemblie
   Config/          the config model (auto commands, presets, info commands, permissions, Discord handlers)
   Commands/        the body of every command, one *Actions class per group
   Conditions/      cleanup conditions          Features/   auto commands, MOTD, backpacks, suit refill, ...
-  Discord/         Discord webhook logging     Patches/    patch bodies, applied by each host
-TorchPlugin/     Torch host: plugin class, WPF tab, [Category] command wrappers, PatchManager, NLog to Discord
-ServerPlugin/    Magnetar host: IPlugin, Quasar config, [CommandRoot] command wrappers, Harmony, PluginSdk logs to Discord
+  Discord/         Discord webhook logging     Utils/      ownership, grid finder, block lookup, helpers
+TorchPlugin/     Torch host: plugin class, WPF tab, [Category] command wrappers, NLog to Discord
+ServerPlugin/    Magnetar host: IPlugin, Quasar config, [CommandRoot] command wrappers, PluginSdk logs to Discord
   SharedConfig.cs  follows a shared config from the Quasar plugin, undoes local edits while it does
 QuasarPlugin/    the Quasar plugin
   SensEssentials.Quasar/           Quasar UI plugin (net10.0, Blazor): shared config store, sync service, editor pages
@@ -46,7 +46,7 @@ describe the same values JSON, so an option added or renamed in one must be chan
 ## Building
 1. Run `Setup (run before opening solution).bat` once. It creates the `GameBinaries` / `TorchBinaries` junctions (Torch
    build) and `Directory.Build.props` from the template (Magnetar build: `Dedicated64`, `Magnetar`, `MagnetarBin`).
-2. Run `build.bat` (`build.bat torch`, `build.bat magnetar`, `build.bat quasar`, optional `debug` / `nodeploy`), or open
+2. Run `build.bat` (`build.bat torch`, `build.bat magnetar`, `build.bat quasar`, optional `debug` or `release`, then `nodeploy`, for example `build.bat magnetar release nodeploy`), or open
    `SensEssentials.sln`.
    Do not use plain `dotnet build` on the solution, the Torch project needs the .NET Framework MSBuild.
    `dotnet build ServerPlugin -c Release` works on its own.
@@ -66,12 +66,12 @@ describe the same values JSON, so an option added or renamed in one must be chan
 ## Differences between the two builds
 | Feature | Torch | Magnetar |
 |---|---|---|
-| Command Permissions | Yes | No: Magnetar has no hook that runs before a command |
+| Command Permissions | Yes | No: Magnetar has no hook that runs before a command, so commands keep their built-in rank. `!economy top` and `check` show every player's balance to everyone |
 | Info commands | Typed as their own chat word, for example `!discord` | `!info <name>`, since Magnetar has no chat hook |
 | `!admin mute`, `unmute`, `list mute` | Yes | No: they need Torch's chat manager |
 | Dialog pop-ups | Torch's client mod | Magnetar's mission screens (MagnetarMod in the world), otherwise sent as chat |
 | Voxel resets reach clients | Right away, through Torch's client mod | After the player reconnects |
-| Discord Logging sees | Everything in NLog: game, Torch and plugins | Magnetar plugin logs only |
+| Discord Logging sees | Everything in NLog: game, Torch and plugins | Everything logged through PluginSdk, by every Magnetar plugin, not just this one |
 | Auto command steps | Any Torch command | Commands registered with Magnetar |
 | Config | WPF tab with problem hints, Undo and Instructions | Quasar's generated form; instructions are the guide below |
 | Senxs Utilities import | Yes | Not needed |
@@ -81,10 +81,21 @@ commands are too: `!identity clean`, `!faction remove`, `!sandbox clean`.
 
 ## Using Sens Essentials
 Torch: settings are in the plugin's tab, which also has an Instructions tab. Magnetar: settings are in Quasar, under
-Server plugins, Sens Essentials; changes apply as soon as Quasar saves them. The tabs have the same names on both.
+Server plugins, Sens Essentials; changes apply as soon as Quasar saves them. Most tabs have the same names on both.
 
 Most features work the same way: create a preset in the settings, then run it with a chat or console command, or
-make it a step of an Auto Command so it runs on its own. Time fields use `HH:MM:SS`.
+make it a step of an Auto Command so it runs on its own.
+
+Time fields use `HH:MM:SS`, or `D:HH:MM:SS` with days in front. `24:00:00` and `1:00:00:00` are both one day, and the
+smallest step is 1 second. An Interval must be at least 1 second, or the command does not run. A step's Delay can be
+`00:00:00`, which means the next step follows straight away.
+
+Every command is either open to all players or needs Admin. Commands aimed at one player, such as `!kick`, `!ban`,
+`!entities kill` and `!identity clear`, work on your own rank and below, so an Admin can remove a bad Admin but not an
+Owner. The console and auto commands can act on anyone.
+
+If a config cannot be read, the server starts with defaults and keeps the file as `<config>.bad-<date>`, so one bad
+value does not lose your settings.
 
 ### Quick reference
 | Command | What it does |
@@ -96,7 +107,7 @@ make it a step of an Auto Command so it runs on its own. Time fields use `HH:MM:
 | `!identity clean <days> [includeNpcs]` | Reset players inactive for that many days to a brand-new state (the identity is kept) |
 | `!identity purge <days> [includeNpcs]` | Remove players inactive for that many days and everything they own |
 | `!identity clear <player>` | Reset one player to a brand-new state |
-| `!admin refill <player> [minutes]` | Keep one player's suit topped up for a while (default 30, 0 stops it) |
+| `!admin refill <player> [minutes]` | Keep one player's suit topped up for a while (default 30, 0 stops it). Needs Enable Suit Refill |
 
 "Brand-new" means: grids they mostly own are deleted (their blocks on other players' ships go to that ship's owner),
 their offline character is removed, and they leave their faction and lose their GPS markers, reputation and credits.
@@ -105,15 +116,16 @@ NPCs are skipped unless `includeNpcs` is true. Online players are never touched 
 ### General
 - **Stop ships on start**: stops every moving entity when the server starts, against physics trouble while loading.
 - **Show position / GPS marker**: `!grids list` shows each grid's position and can add a GPS marker for it.
-- **Backpack limit**: backpacks (dropped inventories) each player may have. -1 for no limit. Empty backpacks are
-  deleted after 30 seconds.
-- **Cut game tags**: removes mods and block limits from the server browser info. Turn it on when players get
-  "error downloading session settings". Needs a restart.
+- **Backpack limit**: backpacks (dropped inventories) each player may have, 1 by default, counted per player and
+  including bags saved with the world. -1 for no limit. Empty backpacks are deleted after 30 seconds, and so are the
+  oldest ones over the limit, even with items in them.
 
 ### MOTD
 - **MOTD**: shown to every player when they spawn. `%player%` is replaced with their name. `!motd` shows it again.
 - **New user MOTD**: shown instead of the MOTD to players joining for the first time.
 - **MOTD URL**: opened in the player's Steam overlay instead of showing the text, optionally for new players only.
+
+Other plugins with a MOTD, such as CometWorks Essentials, show theirs as well, so players see two.
 
 ### Auto Commands
 Run any command automatically. Give the command a name, choose a trigger, and add steps. Each step is a command
@@ -122,7 +134,7 @@ including the `!` (for example `!save`), followed by how long to wait before the
 | Trigger | Runs |
 |---|---|
 | Disabled | Never on its own; `!admin runauto <name>` still works |
-| Timed | Runs the steps, then waits Interval before running them again |
+| Timed | Waits Interval, runs the steps, and starts over |
 | Scheduled | Once a day at Interval (time of day, server time), on the chosen day or every day |
 | OnStart | Once, shortly after the server has started |
 | GridCount / PlayerCount | Every Interval, compares the number of grids (or online players) with the count, and runs when it matches. A new run does not start while the previous one is still going |
@@ -162,13 +174,13 @@ Turn blocks on or off, or remove them, across the server.
 2. Add items. Each one targets blocks by type or subtype. Types work with or without the `MyObjectBuilder_` prefix
    (`Reactor` and `MyObjectBuilder_Reactor` both work). Each item can wait before the next one.
 3. Optionally add conditions to limit which grids are affected (for example no power, or owned by nobody). They are the
-   same conditions as `!cleanup`, listed by `!cleanup help`.
+   same conditions as `!cleanup`, listed by `!cleanup conditions`.
 
 Run it with `!admin runpreset "Disable Drills"`. A preset with an item without a value, or a condition missing its
 parameter, is refused and the reason is shown.
 
 ### Cleanup Presets
-Delete grids by name, owner, power, distance from players and many other conditions. `!cleanup help` lists them all.
+Delete grids by name, owner, power, distance from players and many other conditions. `!cleanup conditions` lists them all.
 - **Targets** say what you are looking for, for example grids named `Container MK` or grids owned by nobody. Each target
   runs as its own `!cleanup delete`.
 - **Conditions** are added to every target, for example no power, or far from players.
@@ -176,12 +188,22 @@ Delete grids by name, owner, power, distance from players and many other conditi
 - **DeleteFloatingObjects** as the action removes loose floating items; it needs no targets or conditions.
 
 Ships with rotors, hinges and pistons are checked and deleted together with everything attached: the name and grid type
-are checked on the largest grid, block and PCU counts are totals, the owner is whoever owns the most blocks (owned by
-nobody means no block is owned), "has" conditions match when any part has it and "no" conditions only when no part has
-it.
+are checked on the largest grid, block and PCU counts are totals, "has" conditions match when any part has it and "no"
+conditions only when no part has it.
 
-Safety: if a condition is unknown, is missing its parameter or has a parameter that cannot be read, nothing is deleted
-and the reason is shown. Player distance only counts players alive in the world.
+**`OwnedBy` and `HasOwnerType` are different.** `OwnedBy` asks whether **any** block belongs to that owner, so one NPC
+block on a player's ship is enough for `OwnedBy npc`. `HasOwnerType` asks who the **majority** owner is. Both take `npc`,
+`nobody`, `player` or `pirates`, in upper or lower case, and `OwnedBy` also takes a player name or IdentityId.
+
+`OwnedBy nobody` is the one exception: it means no block has an owner at all. It still runs, but it shows a warning,
+because deleting is permanent. `HasOwnerType nobody` also matches ships whose owner's identity was deleted.
+
+Safety: if a condition is unknown, is missing its parameter, has a parameter that cannot be read, or names a player or
+block that does not exist, nothing is deleted and the reason is shown. `!cleanup delete` needs a condition, or `all` to
+delete every grid without a pilot. Player distance only counts players alive in the world.
+
+`!sandbox clean` is for admins who know what it does: it removes offline identities that own no blocks, and deleted
+asteroids generate again.
 
 Name conditions take a pattern (regex): `Container MK` matches any name containing it, `^Static Grid [0-9]+$`,
 `^Large Grid [0-9]+$` and `^Small Grid [0-9]+$` match the game's default names.
@@ -202,8 +224,9 @@ only Magnetar plugin logs are seen.
 - **Pings**: the role and user IDs listed are pinged with every entry. Use a separate handler for pings, for example
   Error and Fatal with pings and Warn without.
 - **Rate limit**: each webhook posts at most this many entries a second. The rest are dropped and the channel is told
-  how many.
-- **Long errors**: stack traces longer than the limit, and errors with inner exceptions, are attached as `log.txt`.
+  how many. Discord sets the real limit, and the plugin waits when told to.
+- **Dead webhooks**: a webhook that no longer exists is logged once and skipped for 10 minutes.
+- **Long errors**: anything cut to fit a Discord message, and errors with inner exceptions, are attached as `log.txt`.
 
 ### Admin Tools
 Suit Refill tops up suits every 10 seconds: oxygen, hydrogen, energy, health, food and radiation, each of which can be
@@ -221,10 +244,13 @@ plugins) and restart Quasar. A "Sens Essentials" page appears in the menu for us
 
 - **Shared configs**: create a config, or start one from a server you already set up ("New from server"). The editor
   has the Torch tabs: General, MOTD, Auto Commands, Sim Speed, Info Commands, Block Presets, Cleanup Presets, Discord
-  Logging, Admin Tools and Instructions, with ⚠ warnings and Undo. Nothing reaches the servers until you click Save.
-- **Servers**: on the Servers tab (or "All servers"), choose the config each server follows. Saving sends the config to
-  every server following it within seconds. Servers that are offline get it as soon as they connect; until then they
+  Logging, Admin Tools and Instructions, with ⚠ warnings and Undo. Your edits reach the servers when you click Save.
+- **Servers**: on the Servers tab (or "All servers"), choose the config each server follows. This replaces that server's
+  own settings right away, so you must accept or cancel first, and a message in the corner confirms what the server
+  did. Saving sends the config to every server following it within seconds. Servers that are offline get it as soon as they connect; until then they
   keep the last config they received, also across restarts.
+- **Leaving**: if Quasar can no longer release a server, for example the plugin was removed, `!admin leavesharedconfig`
+  frees it. Quasar sends the config again if the server is still assigned there.
 - **Local edits**: while a server follows a shared config, changes made to Sens Essentials on that server's Plugins page
   are undone and logged; the server's General tab names the config. Choose "Configured on its own" to edit the server
   by itself again. It keeps its settings. Deleting a config does the same for its servers.
@@ -240,9 +266,15 @@ plugins) and restart Quasar. A "Sens Essentials" page appears in the menu for us
 - Settings from `Senxs_UtilitiesConfig.cfg` (Discord handlers, suit refill) are imported once. Remove the Senxs
   Utilities plugin afterwards, otherwise every log entry is posted to Discord twice.
 - Do not run the original Essentials plugin next to this one: they register the same commands.
+- Not carried over from Essentials: homes (`!home`), the ranks and permissions system (`!pr`) and the default toolbar
+  (`!admin set toolbar`). Command Permissions covers per-player command access.
+- `!econ` is now `!economy`, and `!blocks on|off|remove` take the selector as an argument: `!blocks on type Reactor`.
 - Grid exports (`!grids export`) are now kept in `ExportedGrids` inside the Torch instance folder. Move exports made
   with the original Essentials there to import them.
 
-## License
-Sens Essentials is free and unencumbered software released into the public domain under the
-[Unlicense](LICENSE).
+## License and credits
+Sens Essentials is an independent fork of [Torch Essentials](https://github.com/TorchAPI/Essentials), and much of it
+comes from the work of TorchAPI and its [contributors](https://github.com/TorchAPI/Essentials/graphs/contributors).
+
+New code is under the [Unlicense](LICENSE). Code from Torch Essentials, which has no published license, stays under its
+authors' terms. Fixes taken from it later are credited in the [changelog](CHANGELOG.md).

@@ -122,7 +122,7 @@ public static class CommandPermissions
             return "";
 
         command = command!.Trim().TrimStart('!');
-        return string.Join(" ", command.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
+        return string.Join(" ", command.Split([' '], StringSplitOptions.RemoveEmptyEntries));
     }
 
     // -1 = no match, 0 = wildcard, otherwise the length of the matched rule (longer = more specific)

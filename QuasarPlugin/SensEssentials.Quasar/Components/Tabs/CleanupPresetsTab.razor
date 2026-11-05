@@ -1,6 +1,6 @@
 <div class="se-split">
     <ItemList TItem="CleanupPresetValues" Items="Values.CleanupPresets" @bind-Selected="_selected"
-              Label="p => p.Name" Problem="p => p.Problem()"
+              Label="p => p.Name" Problem="p => p.Problem() ?? p.Warning()"
               Create="Create"
               AddText="Add cleanup preset" EmptyText="No cleanup presets yet." />
 
@@ -16,6 +16,10 @@
             @if (p.Problem() is { } problem)
             {
                 <div class="quasar-notice quasar-notice-error">⚠ @problem A preset marked ⚠ is refused when run.</div>
+            }
+            @if (p.Warning() is { } warning)
+            {
+                <div class="quasar-notice">⚠ @warning</div>
             }
             <section class="quasar-panel se-section">
                 <div class="quasar-form-section">
@@ -56,7 +60,7 @@
                             <h2>Targets</h2>
                             <p class="se-hint">What you are looking for, for example grids named "Container MK" or grids owned by nobody.
                                 Each target runs as its own !cleanup delete with the conditions below added.</p>
-                            <ConditionRows TCondition="CleanupTargetValues" TType="CleanupConditionType" Items="p.Targets"
+                            <ConditionRows TCondition="CleanupTargetValues" TType="ConditionType" Items="p.Targets"
                                            Create="() => new CleanupTargetValues()" AddText="Add Target" ItemName="target" EmptyText="No targets yet."
                                            ConditionOf="t => t.Condition" SetCondition="(t, c) => t.Condition = c"
                                            ParameterOf="t => t.Parameter" SetParameter="(t, v) => t.Parameter = v"
@@ -71,7 +75,7 @@
                         <h2>Conditions</h2>
                         <p class="se-hint">Shared filters added to every target, for example no power, or far from players. If a condition is
                             unknown, is missing its parameter or its parameter cannot be read, nothing is deleted and the reason is shown.</p>
-                        <ConditionRows TCondition="CleanupConditionValues" TType="CleanupConditionType" Items="p.Conditions"
+                        <ConditionRows TCondition="CleanupConditionValues" TType="ConditionType" Items="p.Conditions"
                                        Create="() => new CleanupConditionValues()"
                                        ConditionOf="c => c.Condition" SetCondition="(c, t) => c.Condition = t"
                                        ParameterOf="c => c.Parameter" SetParameter="(c, v) => c.Parameter = v"

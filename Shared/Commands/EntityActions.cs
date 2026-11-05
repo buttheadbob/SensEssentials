@@ -12,7 +12,7 @@ using VRage.Game;
 using VRage.Network;
 using Sandbox.Game;
 using Sandbox.Game.Entities.Cube;
-using Sandbox.Game.EntityComponents;
+using Sandbox.Game.World;
 using VRage.Game.ModAPI.Interfaces;
 
 namespace SensEssentials.Commands;
@@ -37,23 +37,26 @@ public sealed class EntityActions(ICommandContext context) : CommandActions(cont
     public void Refresh()
     {
         if (Context.Player == null)
+        {
+            Context.Respond("This command can only be used in-game.");
             return;
+        }
 
         var steamid = Context.Player.SteamUserId;
         if (_commandtimeout.TryGetValue(steamid, out DateTime lastcommand))
         {
-            TimeSpan remaining = TimeSpan.FromMinutes(1) - (DateTime.Now - lastcommand);
+            TimeSpan remaining = TimeSpan.FromMinutes(1) - (DateTime.UtcNow - lastcommand);
             if (remaining > TimeSpan.Zero)
             {
                 Context.Respond($"Cooldown active. You can use this command again in {Math.Ceiling(remaining.TotalSeconds):N0} seconds");
                 return;
             }
                 
-            _commandtimeout[steamid] = DateTime.Now;
+            _commandtimeout[steamid] = DateTime.UtcNow;
         }
         else
         {
-            _commandtimeout.Add(steamid, DateTime.Now);
+            _commandtimeout.Add(steamid, DateTime.UtcNow);
         }
 
         if (ClientStatesField == null || ReplicablesField == null || RemoveForClientMethod == null || ForceReplicableMethod == null)
@@ -65,12 +68,14 @@ public sealed class EntityActions(ICommandContext context) : CommandActions(cont
 
         var playerEndpoint = new Endpoint(Context.Player.SteamUserId, 0);
         var replicationServer = (MyReplicationServer)MyMultiplayer.ReplicationLayer;
-        if (ClientStatesField.GetValue(replicationServer) is not IDictionary clientDataDict || !clientDataDict.Contains(playerEndpoint))
+        if (ClientStatesField.GetValue(replicationServer) is not IDictionary clientDataDict || !clientDataDict.Contains(playerEndpoint)
+            || ReplicablesField.GetValue(clientDataDict[playerEndpoint]) is not IEnumerable clientReplicables)
+        {
+            Context.Respond("Could not find your connection on the server.");
             return;
+        }
 
         var clientData = clientDataDict[playerEndpoint];
-        if (ReplicablesField.GetValue(clientData) is not IEnumerable clientReplicables)
-            return;
 
         // Copied first, since removing a replicable changes the client's collection.
         var replicableList = new List<IMyReplicable>();
@@ -97,7 +102,14 @@ public sealed class EntityActions(ICommandContext context) : CommandActions(cont
             return;
         }
 
-        entity!.Physics?.ClearSpeed();
+        var physics = entity!.Physics;
+        if (physics == null)
+        {
+            Context.Respond($"Entity '{entity.DisplayName}' has no physics to stop.");
+            return;
+        }
+
+        physics.ClearSpeed();
         Context.Respond($"Entity '{entity.DisplayName}' stopped");
     }
 
@@ -119,6 +131,12 @@ public sealed class EntityActions(ICommandContext context) : CommandActions(cont
             return;
         }
 
+        if (entity is MyCubeBlock or MyVoxelBase)
+        {
+            Context.Respond("Use !blocks remove for blocks and !voxels for planets and asteroids.");
+            return;
+        }
+
         if (entity is MyCubeGrid grid)
             Utilities.EjectPilots(grid);
 
@@ -128,13 +146,18 @@ public sealed class EntityActions(ICommandContext context) : CommandActions(cont
 
     public void Kill(string playerName)
     {
-        /*
-         * First we try killing the player when hes online. This is easy and fast
-         * and can also kill the player while being seated.
-         */
         var player = Utilities.GetPlayerByNameOrId(playerName);
-        if (player != null) 
+        if (player != null)
         {
+            if (!CanActOn(player.SteamUserId))
+                return;
+
+            if (player.Character == null)
+            {
+                Context.Respond($"{player.DisplayName} has no character right now.");
+                return;
+            }
+
             MyVisualScriptLogicProvider.SetPlayersHealth(player.IdentityId, 0);
 
             EssentialsCore.Host.SendChat(null, $"{player.DisplayName} was killed by an admin [{Context.Player?.DisplayName ?? "Console Command"}]");
@@ -142,23 +165,23 @@ public sealed class EntityActions(ICommandContext context) : CommandActions(cont
             return;
         }
 
-        /*
-         * If we could not find the player there is a chance he is offline, in that case we try inflicting
-         * damage to the character as the VST will not help us with offline characters.
-         */
-        if (!Utilities.TryGetEntityByNameOrId(playerName, out IMyEntity? entity)) {
-            Context.Respond($"Entity '{playerName}' not found.");
+        // An offline player's character. Seated characters are not in the entity list, so ask the identity first.
+        var identity = Utilities.GetIdentityByNameOrIds(playerName);
+        IMyCharacter? character = identity == null ? null : MySession.Static.Players.TryGetIdentity(identity.IdentityId)?.Character;
+        if (character == null && Utilities.TryGetEntityByNameOrId(playerName, out IMyEntity? entity))
+            character = entity as IMyCharacter;
+
+        if (character == null)
+        {
+            Context.Respond($"No character found for '{playerName}'.");
             return;
         }
 
-        if (entity is IMyCharacter) 
-        {
-            var destroyable = entity as IMyDestroyableObject;
+        if (identity != null && MySession.Static.Players.TryGetSteamId(identity.IdentityId) is var steamId and not 0 && !CanActOn(steamId))
+            return;
 
-            destroyable?.DoDamage(1000f, MyDamageType.Radioactivity, true);
-
-            EssentialsCore.Host.SendChat(null, $"{entity.DisplayName} was killed by an admin");
-        }
+        ((IMyDestroyableObject)character).DoDamage(0, MyDamageType.Suicide, true);
+        EssentialsCore.Host.SendChat(null, $"{character.DisplayName} was killed by an admin");
     }
 
     public void Find(string name)
@@ -172,7 +195,7 @@ public sealed class EntityActions(ICommandContext context) : CommandActions(cont
             if (entity is IMyVoxelBase voxel && (voxel.StorageName?.Contains(name, StringComparison.CurrentCultureIgnoreCase) ?? false))
                 sb.AppendLine($"{voxel.StorageName} ({entity.EntityId})");
             else if (entity?.DisplayName?.Contains(name, StringComparison.CurrentCultureIgnoreCase) ?? false)
-                //This can be null??? :keen:
+                // DisplayName can be null.
                 sb.AppendLine($"{entity.DisplayName} ({entity.EntityId})");
         }
 
@@ -210,12 +233,7 @@ public sealed class EntityActions(ICommandContext context) : CommandActions(cont
         int changed = 0;
         foreach (var block in grids.SelectMany(g => g.GetFatBlocks<MyFunctionalBlock>()))
         {
-            // Any block that produces electricity, so modded and newer power blocks are included.
-            var source = block.Components.Get<MyResourceSourceComponent>();
-            if (source == null || !source.ResourceTypes.Contains(MyResourceDistributorComponent.ElectricityId))
-                continue;
-
-            if (block.Enabled == enabled)
+            if (!Utilities.ProducesPower(block) || block.Enabled == enabled)
                 continue;
 
             block.Enabled = enabled;
@@ -258,7 +276,7 @@ public sealed class EntityActions(ICommandContext context) : CommandActions(cont
         if (player != null) 
         {
             /* If he is online we check if he is currently seated. If he is eject him. */
-            if (player?.Controller.ControlledEntity is MyCockpit controller) 
+            if (player.Controller?.ControlledEntity is MyCockpit controller) 
             {
                 controller.Use();
                 Context.Respond($"Player '{playerName}' ejected.");

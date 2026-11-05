@@ -1,0 +1,24 @@
+# Keeps the code on modern C#. These features are compiler features, so they also build for .NET Framework 4.8.
+# Index and range operators stay off: on .NET Framework they need System.Index and System.Range.
+root = true
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:suggestion
+csharp_style_implicit_object_creation_when_type_is_apparent = true:suggestion
+csharp_prefer_simple_using_statement = true:suggestion
+csharp_style_pattern_matching_over_is_with_cast_check = true:suggestion
+csharp_style_pattern_matching_over_as_with_null_check = true:suggestion
+csharp_style_prefer_switch_expression = true:suggestion
+csharp_style_prefer_pattern_matching = true:suggestion
+csharp_style_prefer_not_pattern = true:suggestion
+csharp_style_throw_expression = true:suggestion
+csharp_style_inlined_variable_declaration = true:suggestion
+csharp_style_prefer_index_operator = false
+csharp_style_prefer_range_operator = false
+dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_prefer_compound_assignment = true:suggestion
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true:suggestion

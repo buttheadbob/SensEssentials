@@ -4,6 +4,7 @@ using System.Linq;
 using Sandbox.Common.ObjectBuilders;
 using Sandbox.Game.Entities;
 using Sandbox.Game.Entities.Cube;
+using Sandbox.ModAPI;
 
 namespace SensEssentials.Commands;
 
@@ -37,7 +38,7 @@ public sealed class BlocksActions(ICommandContext context) : CommandActions(cont
             Context.Respond("  !blocks off type MyObjectBuilder_Reactor");
             Context.Respond("  !blocks off subtype LargeBlockSmallGenerator");
             Context.Respond("  !blocks off general weapons");
-            Context.Respond("  !blocks off type MyObjectBuilder_Turret playerdistancegreaterthan 5000");
+            Context.Respond("  !blocks off type MyObjectBuilder_LargeGatlingTurret playerdistancegreaterthan 5000");
             return;
         }
 
@@ -91,8 +92,14 @@ public sealed class BlocksActions(ICommandContext context) : CommandActions(cont
             return;
         }
 
-        var selector = Context.Args[0].ToLower();
+        var selector = Context.Args[0].ToLowerInvariant();
         var value = Context.Args[1];
+
+        if ((selector == "type" && !BlockLookup.IsKnownType(value)) || (selector == "subtype" && !BlockLookup.IsKnownSubtype(value)))
+        {
+            Context.Respond($"Unknown block {selector} '{value}'. Nothing was changed.");
+            return;
+        }
 
         // Parse remaining args as conditions
         var conditionArgs = Context.Args.Skip(2).ToList();
@@ -110,7 +117,7 @@ public sealed class BlocksActions(ICommandContext context) : CommandActions(cont
             return;
         }
 
-        int processedCount = 0;
+        int? processedCount;
 
         switch (selector)
         {
@@ -129,26 +136,28 @@ public sealed class BlocksActions(ICommandContext context) : CommandActions(cont
                 return;
         }
 
-        ReportResult(action, processedCount, selector, value);
+        if (processedCount is { } count)
+            ReportResult(action, count, selector, value);
     }
 
     private int ProcessByType(List<MyCubeGrid> grids, string type, BlockAction action)
     {
         int count = 0;
 
-        if (action == BlockAction.Remove)
+        // Armor and other simple blocks are only in the full block list.
+        if (action is BlockAction.Remove or BlockAction.Count)
         {
-            var toRemove = new List<MySlimBlock>();
+            var matches = new List<MySlimBlock>();
             foreach (var grid in grids)
             {
                 foreach (var block in grid.GetBlocks())
                 {
                     if (Utilities.IsBlockType(block.BlockDefinition.Id.TypeId, type))
-                        toRemove.Add(block);
+                        matches.Add(block);
                 }
             }
 
-            count = RemoveBlocks(toRemove);
+            count = action == BlockAction.Remove ? RemoveBlocks(matches) : matches.Count;
         }
         else
         {
@@ -172,20 +181,20 @@ public sealed class BlocksActions(ICommandContext context) : CommandActions(cont
     {
         int count = 0;
 
-        if (action == BlockAction.Remove)
+        if (action is BlockAction.Remove or BlockAction.Count)
         {
-            var toRemove = new List<MySlimBlock>();
+            var matches = new List<MySlimBlock>();
             foreach (var grid in grids)
             {
                 foreach (var block in grid.GetBlocks())
                 {
                     var blockSubtype = block.BlockDefinition.Id.SubtypeName;
                     if (string.Compare(subtype, blockSubtype, StringComparison.InvariantCultureIgnoreCase) == 0)
-                        toRemove.Add(block);
+                        matches.Add(block);
                 }
             }
 
-            count = RemoveBlocks(toRemove);
+            count = action == BlockAction.Remove ? RemoveBlocks(matches) : matches.Count;
         }
         else
         {
@@ -206,20 +215,20 @@ public sealed class BlocksActions(ICommandContext context) : CommandActions(cont
         return count;
     }
 
-    private int ProcessByCategory(List<MyCubeGrid> grids, string category, BlockAction action)
+    private int? ProcessByCategory(List<MyCubeGrid> grids, string category, BlockAction action)
     {
         // IsDefined rejects numbers, which TryParse accepts even when they match no category.
         if (!Enum.TryParse(category, true, out BlockCategory blockCategory) || !Enum.IsDefined(typeof(BlockCategory), blockCategory))
         {
             Context.Respond($"{category} is not a valid category. Use one of the following: " + 
-                            string.Join(", ", Enum.GetValues(typeof(BlockCategory))));
-            return 0;
+                            string.Join(", ", Enum.GetNames(typeof(BlockCategory))));
+            return null;
         }
 
         if (action == BlockAction.Remove)
         {
             Context.Respond("Remove action is not supported for categories. Use type or subtype instead.");
-            return 0;
+            return null;
         }
 
         int count = 0;
@@ -283,28 +292,16 @@ public sealed class BlocksActions(ICommandContext context) : CommandActions(cont
 
     private void ReportResult(BlockAction action, int count, string selector, string value)
     {
-        string actionText;
-        switch (action)
+        string actionText = action switch
         {
-            case BlockAction.TurnOn:
-                actionText = "Enabled";
-                break;
-            case BlockAction.TurnOff:
-                actionText = "Disabled";
-                break;
-            case BlockAction.Remove:
-                actionText = "Removed";
-                break;
-            case BlockAction.Count:
-                actionText = "Found";
-                break;
-            default:
-                actionText = "Processed";
-                break;
-        }
-
+            BlockAction.TurnOn => "Enabled",
+            BlockAction.TurnOff => "Disabled",
+            BlockAction.Remove => "Removed",
+            BlockAction.Count => "Found",
+            _ => "Processed",
+        };
         Context.Respond($"{actionText} {count} blocks of {selector} {value}.");
-        Log.Info($"BlocksModule: {actionText} {count} blocks of {selector} {value}");
+        Log.Info($"!blocks: {actionText} {count} blocks of {selector} {value}");
     }
 
     #endregion
@@ -313,24 +310,13 @@ public sealed class BlocksActions(ICommandContext context) : CommandActions(cont
 
     public bool IsBlockTypeOf(MyFunctionalBlock block, BlockCategory category)
     {
-        switch (category)
+        return category switch
         {
-            case BlockCategory.Power:
-                return block.BlockDefinition.Id.TypeId == typeof(MyObjectBuilder_Reactor) ||
-                       block.BlockDefinition.Id.TypeId == typeof(MyObjectBuilder_BatteryBlock) ||
-                       block.BlockDefinition.Id.TypeId == typeof(MyObjectBuilder_SolarPanel) ||
-                       block.BlockDefinition.Id.TypeId == typeof(MyObjectBuilder_FueledPowerProducer);
-            case BlockCategory.Production:
-                return block.BlockDefinition.Id.TypeId == typeof(MyObjectBuilder_Assembler) ||
-                       block.BlockDefinition.Id.TypeId == typeof(MyObjectBuilder_Refinery) ||
-                       block.BlockDefinition.Id.TypeId == typeof(MyObjectBuilder_OxygenGenerator);
-            case BlockCategory.Weapons:
-                return block.BlockDefinition.Id.TypeId == typeof(MyObjectBuilder_InteriorTurret) ||
-                       block.BlockDefinition.Id.TypeId == typeof(MyObjectBuilder_LargeGatlingTurret) ||
-                       block.BlockDefinition.Id.TypeId == typeof(MyObjectBuilder_LargeMissileTurret);
-            default:
-                throw new InvalidBranchException();
-        }
+            BlockCategory.Power => Utilities.ProducesPower(block),
+            BlockCategory.Production => block is MyProductionBlock || block.BlockDefinition.Id.TypeId == typeof(MyObjectBuilder_OxygenGenerator),
+            BlockCategory.Weapons => block is IMyUserControllableGun,
+            _ => false,
+        };
     }
 
     public enum BlockCategory

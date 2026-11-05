@@ -10,7 +10,7 @@
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
-    <LangVersion>preview</LangVersion>
+    <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
@@ -147,6 +147,7 @@
       <Link>Properties\AssemblyVersion.cs</Link>
     </Compile>
     <Compile Include="CommandPermissionHook.cs" />
+    <Compile Include="ConfigFile.cs" />
     <Compile Include="Commands\AdminModule.cs" />
     <Compile Include="Commands\BlocksModule.cs" />
     <Compile Include="Commands\CleanupModule.cs" />
@@ -182,8 +183,11 @@
     </Page>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <Target Name="Zip" BeforeTargets="AfterBuild">
+  <!-- Only what the plugin needs, so nothing left over in the output folder ends up in the zip. -->
+  <Target Name="Zip" AfterTargets="Build">
+    <RemoveDir Directories="$(IntermediateOutputPath)zip" />
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll;$(OutputPath)$(AssemblyName).pdb;$(OutputPath)manifest.xml" DestinationFolder="$(IntermediateOutputPath)zip" />
     <MakeDir Directories="..\Build\" />
-    <ZipDirectory SourceDirectory="$(OutputPath)" DestinationFile="..\Build\$(AssemblyName).zip" Overwrite="true" />
+    <ZipDirectory SourceDirectory="$(IntermediateOutputPath)zip" DestinationFile="..\Build\$(AssemblyName).zip" Overwrite="true" />
   </Target>
 </Project>

@@ -82,39 +82,10 @@ public enum CleanupAction
     DeleteFloatingObjects
 }
 
-public enum CleanupConditionType
-{
-    Name,
-    BlocksLessThan,
-    BlocksGreaterThan,
-    PcuGreaterThan,
-    PcuLessThan,
-    HasGridType,
-    HasOwnerType,
-    HasPower,
-    NoPower,
-    InsidePlanet,
-    PlayerDistanceLessThan,
-    PlayerDistanceGreaterThan,
-    PoweredGridDistanceGreaterThan,
-    CenterDistanceLessThan,
-    CenterDistanceGreaterThan,
-    OwnedBy,
-    HasType,
-    NoType,
-    HasTypeFast,
-    NoTypeFast,
-    HasSubtype,
-    NoSubtype,
-    HasSubtypeFast,
-    NoSubtypeFast,
-    HasPilot
-}
-
 /// <summary>
 /// Log levels in NLog's order, so (int)level equals NLog's LogLevel.Ordinal.
 /// </summary>
-public enum DiscordLogLevel
+public enum EssentialsLogLevel
 {
     Trace,
     Debug,
@@ -134,7 +105,7 @@ public static class ConditionTypeExtensions
             ConditionType.NoTypeFast => "notype-fast",
             ConditionType.HasSubtypeFast => "hassubtype-fast",
             ConditionType.NoSubtypeFast => "nosubtype-fast",
-            _ => condition.ToString().ToLower()
+            _ => condition.ToString().ToLowerInvariant()
         };
     }
 
@@ -148,26 +119,15 @@ public static class ConditionTypeExtensions
     }
 }
 
-public static class CleanupConditionTypeExtensions
+/// <summary>
+/// Warnings about conditions, shared with the Quasar plugin.
+/// </summary>
+public static class ConditionNotes
 {
-    public static string ToCommandString(this CleanupConditionType condition)
-    {
-        return condition switch
-        {
-            CleanupConditionType.HasTypeFast => "hastype-fast",
-            CleanupConditionType.NoTypeFast => "notype-fast",
-            CleanupConditionType.HasSubtypeFast => "hassubtype-fast",
-            CleanupConditionType.NoSubtypeFast => "nosubtype-fast",
-            _ => condition.ToString().ToLower()
-        };
-    }
+    public const string OwnedByNobody = "OwnedBy Nobody matches grids where no block has an owner. A delete or remove action on it "
+        + "is permanent. Check this is what you want, or use HasOwnerType nobody, which goes by the majority owner.";
 
-    public static bool RequiresParameter(this CleanupConditionType condition)
-    {
-        return condition switch
-        {
-            CleanupConditionType.HasPower or CleanupConditionType.NoPower or CleanupConditionType.InsidePlanet or CleanupConditionType.HasPilot => false,
-            _ => true
-        };
-    }
+    public static bool IsOwnedByNobody(string condition, string? parameter) =>
+        condition.Equals("ownedby", System.StringComparison.OrdinalIgnoreCase)
+        && string.Equals(parameter?.Trim(), "nobody", System.StringComparison.OrdinalIgnoreCase);
 }

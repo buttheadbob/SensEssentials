@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
@@ -40,10 +41,11 @@ internal static class LegacyUtilitiesImport
             config.DiscordRateLimitPerSecond = Int(root, "Log2DiscordRateLimitPerSecond", config.DiscordRateLimitPerSecond);
             config.DiscordStackTraceEmbedLimit = Int(root, "Log2DiscordStackTraceEmbedLimit", config.DiscordStackTraceEmbedLimit);
 
-            int handlers = 0;
+            // Added last: the config saves itself, so a failure partway must not leave handlers to be imported twice.
+            var handlers = new List<DiscordLogHandler>();
             foreach (var h in Child(root, "LogHandlers")?.Elements().Where(e => e.Name.LocalName == "LogHandler") ?? [])
             {
-                config.DiscordLogHandlers.Add(new DiscordLogHandler
+                handlers.Add(new DiscordLogHandler
                 {
                     Name = Text(h, "Name"),
                     WebhookUrl = Text(h, "DiscordWebHook"),
@@ -55,7 +57,6 @@ internal static class LegacyUtilitiesImport
                     UserPings = List(h, "MembersToPing"),
                     OnlyWhenServerOnline = Bool(h, "OnlyWhenServerOnline", false)
                 });
-                handlers++;
             }
 
             config.SuitRefillEnabled = master && Bool(root, "AdminToolsEnable", false);
@@ -68,8 +69,11 @@ internal static class LegacyUtilitiesImport
             config.SuitRefillRadiationImmunity = Bool(root, "AdminResetRadiationImmunity", true);
             config.SuitResetRadiation = Bool(root, "AdminResetRadiation", true);
 
+            foreach (var handler in handlers)
+                config.DiscordLogHandlers.Add(handler);
+
             config.SenxsUtilitiesImported = true;
-            Log.Warn($"Imported {handlers} Discord log handler(s) and the suit refill settings from {path}. " +
+            Log.Warn($"Imported {handlers.Count} Discord log handler(s) and the suit refill settings from {path}. " +
                      "Remove the Senxs Utilities plugin, otherwise every log entry is posted to Discord twice.");
             return true;
         }
@@ -92,5 +96,5 @@ internal static class LegacyUtilitiesImport
     private static string List(XElement parent, string name) =>
         string.Join(",", Child(parent, name)?.Elements().Select(e => e.Value.Trim()).Where(v => v.Length > 0) ?? []);
 
-    private static DiscordLogLevel Level(int ordinal) => (DiscordLogLevel)Math.Min(Math.Max(ordinal, 0), 5);
+    private static EssentialsLogLevel Level(int ordinal) => (EssentialsLogLevel)Math.Min(Math.Max(ordinal, 0), 5);
 }

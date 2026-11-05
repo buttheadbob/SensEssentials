@@ -1,6 +1,6 @@
 <div class="se-split">
     <ItemList TItem="BlockPresetValues" Items="Values.BlockPresets" @bind-Selected="_selected"
-              Label="b => b.Name" Problem="b => b.Problem()"
+              Label="b => b.Name" Problem="b => b.Problem() ?? b.Warning()"
               Create="Create"
               AddText="Add block preset" EmptyText="No block presets yet." />
 
@@ -15,6 +15,10 @@
             @if (b.Problem() is { } problem)
             {
                 <div class="quasar-notice quasar-notice-error">⚠ @problem A preset marked ⚠ is refused when run.</div>
+            }
+            @if (b.Warning() is { } warning)
+            {
+                <div class="quasar-notice">⚠ @warning</div>
             }
             <section class="quasar-panel se-section">
                 <div class="quasar-form-section">
@@ -58,7 +62,7 @@
                 <div class="quasar-form-section">
                     <h2>Conditions</h2>
                     <p class="se-hint">Optional. Only grids matching all of these are affected. They are the same conditions as !cleanup,
-                        listed in game by !cleanup help.</p>
+                        listed in game by !cleanup conditions.</p>
                     <ConditionRows TCondition="BlockPresetConditionValues" TType="ConditionType" Items="b.Conditions"
                                    Create="() => new BlockPresetConditionValues()"
                                    ConditionOf="c => c.Condition" SetCondition="(c, t) => c.Condition = t"

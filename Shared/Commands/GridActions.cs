@@ -1,5 +1,4 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 using System.Linq;
 using System.Text;
 using Sandbox;
@@ -10,7 +9,6 @@ using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.Game;
 using System.Collections.Generic;
-using VRage.Game.Entity;
 using VRage.ObjectBuilders.Private;
 
 namespace SensEssentials.Commands;
@@ -30,8 +28,9 @@ public sealed class GridActions(ICommandContext context) : CommandActions(contex
             return;
         }
 
-        long identityId;
-        if (!long.TryParse(playerName, out identityId))
+        // 0 gives the grid to nobody. Anything else must be a real identity, so a mistyped id cannot own a grid.
+        long identityId = 0;
+        if (playerName != "0")
         {
             var player = Utilities.GetIdentityByNameOrIds(playerName);
             if (player == null)
@@ -46,67 +45,58 @@ public sealed class GridActions(ICommandContext context) : CommandActions(contex
         Context.Respond($"Transferred ownership of {grid.DisplayName} to {identityId}");
     }
 
+    /// <summary>
+    /// Ejects every pilot from one ship and everything attached to it by rotors, hinges and pistons: the ship with
+    /// the given name or entity id, or without a name the ship the caller is looking at.
+    /// </summary>
     public void Eject(string? gridName)
     {
-        int ejectedPlayersCount = 0;
-
-        // Snapshot entity list for thread safety
-        List<MyEntity> entities = MyEntities.GetEntities().ToList();
-
-        List<MyCubeGrid> grids = entities
-            .OfType<MyCubeGrid>()
-            .Where(g => g.Physics != null && (gridName == null || string.Equals(g.DisplayName, gridName, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
-
-        if (!string.IsNullOrWhiteSpace(gridName))
+        List<MyCubeGrid> group;
+        if (string.IsNullOrWhiteSpace(gridName))
         {
-            if (grids.Count == 0)
+            if (Context.Player == null)
             {
-                Context.Respond($"No grids found with name '{gridName}'.");
+                Context.Respond("The console always has to give a grid name.");
                 return;
             }
-                
-            if (grids.Count > 1)
+
+            if (Context.Player.Character is not { IsDead: false } character)
             {
-                Context.Respond($"{grids.Count} grids found with name '{gridName}'.  Aborting.");
+                Context.Respond("You need to be spawned in to use this without a grid name.");
                 return;
             }
-                
-            // Exactly one grid matches
-            MyCubeGrid? grid = grids.FirstOrDefault();
-            if (grid == null)
-            {
-                // safety check
-                Context.Respond($"No grids found with name '{gridName}'.");
-                return;   
-            }
 
-            List<MyCockpit> cockpits = grid.GetFatBlocks<MyCockpit>()
-                .Where(c => c.Pilot != null)
-                .ToList();
-
-            foreach (MyCockpit cockpit in cockpits)
+            var lookAt = GridFinder.FindLookAtGroup(character);
+            if (lookAt == null)
             {
-                cockpit.RemovePilot();
-                ejectedPlayersCount++;
+                Context.Respond("No grid in your line of sight. Spectator view does not count.");
+                return;
             }
+            group = lookAt;
         }
         else
         {
-            // No grid name given – eject everyone from all cockpits
-            List<MyCockpit> cockpits = grids
-                .SelectMany(g => g.GetFatBlocks<MyCockpit>())
-                .Where(c => c.Pilot != null)
-                .ToList();
-
-            foreach (MyCockpit cockpit in cockpits)
+            var groups = GridFinder.FindGroupsByName(gridName!);
+            if (groups.Count == 0)
             {
-                cockpit.RemovePilot();
-                ejectedPlayersCount++;
+                Context.Respond($"Grid with name '{gridName}' was not found.");
+                return;
             }
+
+            // Several ships share the name: refuse rather than guess which one was meant.
+            if (groups.Count > 1)
+            {
+                Context.Respond($"{groups.Count} grids are named '{gridName}'. Nothing was done; use the grid's entity id.");
+                return;
+            }
+            group = groups[0];
         }
 
-        Context.Respond($"Ejected {ejectedPlayersCount} player(s){(gridName != null ? $" from '{gridName}'" : "")}.");
+        var cockpits = group.SelectMany(g => g.GetFatBlocks<MyCockpit>()).Where(c => c.Pilot != null).ToList();
+        foreach (var cockpit in cockpits)
+            cockpit.RemovePilot();
+
+        Context.Respond($"Ejected {cockpits.Count} player(s) from '{GridFinder.GetMainGrid(group).DisplayName}'.");
     }
 
     public void StaticLarge()
@@ -114,8 +104,11 @@ public sealed class GridActions(ICommandContext context) : CommandActions(contex
         int count = 0;
         foreach (var grid in MyEntities.GetEntities().OfType<MyCubeGrid>().Where(g => g.GridSizeEnum == MyCubeSize.Large && g.Projector == null && !g.IsStatic).ToList())
         {
-            grid.OnConvertedToStationRequest(); //Keen why do you do this to me?
-            count++;
+            // The game skips a grid that is still moving.
+            grid.Physics?.ClearSpeed();
+            grid.OnConvertedToStationRequest();
+            if (grid.IsStatic)
+                count++;
         }
 
         Context.Respond($"Converted {count} large grids to stations.");
@@ -149,7 +142,7 @@ public sealed class GridActions(ICommandContext context) : CommandActions(contex
         var id = Context.Player.IdentityId;
         var config = EssentialsCore.Config;
         var gpsApi = MyAPIGateway.Session?.GPS;
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new();
 
         // Replace markers from the previous run instead of adding duplicates.
         if (config.MarkerShowPosition && gpsApi != null)
@@ -216,8 +209,9 @@ public sealed class GridActions(ICommandContext context) : CommandActions(contex
             return;
         }
 
-        MyObjectBuilderSerializerKeen.SerializeXML(path, false, ent.GetObjectBuilder());
-        Context.Respond($"Grid saved as {exportName}");
+        Context.Respond(MyObjectBuilderSerializerKeen.SerializeXML(path, false, ent.GetObjectBuilder())
+            ? $"Grid saved as {exportName}. Only this grid is saved, not what is attached to it."
+            : $"Could not save the grid as {exportName}. Check the log.");
     }
         
     public void Import(string gridName, string? targetName)
@@ -258,21 +252,24 @@ public sealed class GridActions(ICommandContext context) : CommandActions(contex
             return;
         }
 
-        if (MyObjectBuilderSerializerKeen.DeserializeXML(path, out MyObjectBuilder_CubeGrid grid))
+        if (!MyObjectBuilderSerializerKeen.DeserializeXML(path, out MyObjectBuilder_CubeGrid grid))
         {
-            Context.Respond($"Importing grid {gridName}");
-            MyEntities.RemapObjectBuilder(grid);
-            var pos = MyEntities.FindFreePlaceCustom(ent!.GetPosition(), grid.CalculateBoundingSphere().Radius);
-            if (pos == null)
-            {
-                Context.Respond("No free place.");
-                return;
-            }
-
-            var x = grid.PositionAndOrientation ?? new MyPositionAndOrientation();
-            x.Position = pos.Value;
-            grid.PositionAndOrientation = x;
-            MyEntities.CreateFromObjectBuilderParallel(grid, true);
+            Context.Respond($"Could not read {gridName}. The file is damaged or is not a grid.");
+            return;
         }
+
+        Context.Respond($"Importing grid {gridName}");
+        MyEntities.RemapObjectBuilder(grid);
+        var pos = MyEntities.FindFreePlaceCustom(ent!.GetPosition(), grid.CalculateBoundingSphere().Radius);
+        if (pos == null)
+        {
+            Context.Respond("No free place.");
+            return;
+        }
+
+        var x = grid.PositionAndOrientation ?? MyPositionAndOrientation.Default;
+        x.Position = pos.Value;
+        grid.PositionAndOrientation = x;
+        MyEntities.CreateFromObjectBuilderParallel(grid, true);
     }
 }

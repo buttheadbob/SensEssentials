@@ -49,7 +49,7 @@ public sealed class KnownIdsStorage
 
         try
         {
-            File.WriteAllLines(_filePath, _steamIds.Select(s => $"{s}"));
+            File.AppendAllLines(_filePath, [$"{steamId}"]);
         }
         catch (Exception e)
         {

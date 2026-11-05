@@ -55,17 +55,22 @@ public sealed class EcoActions(ICommandContext context) : CommandActions(context
         }
 
         int changedIdentities = 0;
+        long total = 0;
 
         foreach (long identityId in foundIdentities) {
 
-            ChangeBalance(identityId, -amount);
+            // An account cannot go below zero, so this can be less than was asked for.
+            long taken = -ChangeBalance(identityId, -amount);
+            if (taken == 0)
+                continue;
 
-            Notify.Player(Utilities.GetSteamId(identityId), $"{amount:#,##0} credits have been taken from your virtual account", 10000);
+            Notify.Player(Utilities.GetSteamId(identityId), $"{taken:#,##0} credits have been taken from your virtual account", 10000);
 
+            total += taken;
             changedIdentities++;
         }
 
-        Context.Respond($"{amount:#,##0} credits taken from {changedIdentities:#,##0} account(s)");
+        Context.Respond($"{total:#,##0} credits taken from {changedIdentities:#,##0} account(s)");
     }
 
     public void EcoSet(string player, long amount, bool onlyOnline = false, bool excludeNpcs = true) {
@@ -97,7 +102,7 @@ public sealed class EcoActions(ICommandContext context) : CommandActions(context
     }
 
     public void EcoReset(string player, bool onlyOnline = false, bool excludeNpcs = true) {
-        EcoSet(player, 10_000, onlyOnline, excludeNpcs);
+        EcoSet(player, MyBankingSystem.BankingSystemDefinition?.StartingBalance ?? 10_000, onlyOnline, excludeNpcs);
     }
 
     public void EcoTop(bool onlyOnline = false, bool excludeNpcs = true) {
@@ -106,7 +111,7 @@ public sealed class EcoActions(ICommandContext context) : CommandActions(context
 
         var players = MySession.Static.Players;
 
-        Dictionary<MyIdentity, long> balances = new Dictionary<MyIdentity, long>();
+        Dictionary<MyIdentity, long> balances = [];
         foreach (long identityId in foundIdentities) {
 
             var identity = players.TryGetIdentity(identityId);
@@ -117,7 +122,7 @@ public sealed class EcoActions(ICommandContext context) : CommandActions(context
             balances[identity] = balance;
         }
 
-        StringBuilder ecodata = new StringBuilder();
+        StringBuilder ecodata = new();
         ecodata.AppendLine("Summary of balances across the server");
 
         var sorted = balances.OrderByDescending(x => x.Value).ThenBy(x => x.Key.DisplayName);
@@ -149,11 +154,7 @@ public sealed class EcoActions(ICommandContext context) : CommandActions(context
             Context.Respond("Amount must be greater than 0");
             return;
         }
-        if (Context.Player == null) {
-            Context.Respond("Console cannot execute this command");
-            return;
-        }
-            
+
         /* We are purposely keeping the online check in this method. Otherwise it could cause confusion with players. */
         var p = Utilities.GetPlayerByNameOrId(player);
         if (p == null) {
@@ -161,8 +162,21 @@ public sealed class EcoActions(ICommandContext context) : CommandActions(context
             return;
         }
 
-        var fromIdentitiyId = Context.Player.Identity.IdentityId;
-        var toIdentitiyId = p.Identity.IdentityId;
+        // Null when this runs from the console or an auto command step, where there is no player to pay from.
+        if (Context.Player?.Identity is not { } from)
+        {
+            Context.Respond("This command must be run by a player.");
+            return;
+        }
+
+        if (p.Identity is not { } to)
+        {
+            Context.Respond("That player has no identity yet.");
+            return;
+        }
+
+        var fromIdentitiyId = from.IdentityId;
+        var toIdentitiyId = to.IdentityId;
 
         if (fromIdentitiyId == toIdentitiyId) {
             Context.Respond("You cannot pay yourself!");
@@ -201,7 +215,7 @@ public sealed class EcoActions(ICommandContext context) : CommandActions(context
     /// The balance stays between 0 and <see cref="long.MaxValue"/>. The game does not check the upper end, and a
     /// balance past it would wrap around to a large negative number.
     /// </summary>
-    private static void ChangeBalance(long identityId, long amount) {
+    private static long ChangeBalance(long identityId, long amount) {
 
         long balance = MyBankingSystem.GetBalance(identityId);
 
@@ -210,8 +224,7 @@ public sealed class EcoActions(ICommandContext context) : CommandActions(context
         else if (amount > 0 && amount > long.MaxValue - balance)
             amount = long.MaxValue - balance;
 
-        if (amount != 0)
-            MyBankingSystem.ChangeBalance(identityId, amount);
+        return amount != 0 && MyBankingSystem.ChangeBalance(identityId, amount) ? amount : 0;
     }
 
     /// <summary>True when adding the amount would take the balance past <see cref="long.MaxValue"/>.</summary>
@@ -257,7 +270,7 @@ public sealed class EcoActions(ICommandContext context) : CommandActions(context
         if (excludeNpcs)
             identitiesToCheck = identitiesToCheck.Where(identityId => !Utils.Ownership.IsNpcIdentity(identityId));
 
-        foundIdentities = identitiesToCheck.ToList();
+        foundIdentities = [.. identitiesToCheck];
 
         return true;
     }

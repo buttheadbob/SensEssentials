@@ -104,6 +104,12 @@ public static class ConditionsChecker
                 return new List<MyCubeGrid>();
             }
 
+            if (value is ConditionsImplementations.OwnerFilter { Keyword: "nobody" })
+            {
+                context.Respond($"Warning: {ConditionNotes.OwnedByNobody}");
+                Log.Warn(ConditionNotes.OwnedByNobody);
+            }
+
             conditions.Add(group => condition.EvaluateGroup(group, value, invert));
         }
 

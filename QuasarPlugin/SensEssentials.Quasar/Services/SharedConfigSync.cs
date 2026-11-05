@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Quasar.Plugin.Abstractions.Companion;
@@ -18,7 +19,6 @@ public sealed class ServerState
 
     public SharedConfigStatus? Status { get; set; }
     public string? Error { get; set; }
-    public DateTimeOffset? CheckedUtc { get; set; }
 }
 
 /// <summary>
@@ -37,6 +37,8 @@ public sealed class SharedConfigSync : BackgroundService
     private readonly SemaphoreSlim _wake = new(0, 1);
     private readonly Lock _sync = new();
     private readonly Dictionary<string, ServerState> _servers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _running = new(StringComparer.OrdinalIgnoreCase);
+    private volatile bool _syncAgain;
 
     public event Action? Changed;
 
@@ -138,8 +140,43 @@ public sealed class SharedConfigSync : BackgroundService
         }
         Changed?.Invoke();
 
-        await Task.WhenAll(connected.Where(s => string.IsNullOrEmpty(s.ClusterId)).Select(s => SyncServerAsync(s, cancellationToken)));
-        Changed?.Invoke();
+        foreach (var server in connected.Where(s => string.IsNullOrEmpty(s.ClusterId)))
+        {
+            if (_running.TryAdd(server.ServerId, 0))
+                _ = SyncAndReportAsync(server, cancellationToken);
+            else
+                _syncAgain = true;
+        }
+    }
+
+    /// <summary>
+    /// Each server runs on its own, so one that is slow to answer does not hold up the others or the next pass.
+    /// </summary>
+    private async Task SyncAndReportAsync(QuasarCompanionServer server, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await SyncServerAsync(server, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Quasar is stopping.
+        }
+        catch (Exception e)
+        {
+            _log.LogError(e, "Sens Essentials shared config sync failed for {Server}", server.DisplayName);
+        }
+        finally
+        {
+            _running.TryRemove(server.ServerId, out _);
+            Changed?.Invoke();
+            // A change arrived while this server was busy, so it still needs a pass.
+            if (_syncAgain)
+            {
+                _syncAgain = false;
+                SyncNow();
+            }
+        }
     }
 
     private async Task SyncServerAsync(QuasarCompanionServer server, CancellationToken cancellationToken)
@@ -190,7 +227,6 @@ public sealed class SharedConfigSync : BackgroundService
                 if (status != null)
                     state.Status = status;
                 state.Error = error;
-                state.CheckedUtc = DateTimeOffset.UtcNow;
             }
         }
     }
@@ -205,7 +241,6 @@ public sealed class SharedConfigSync : BackgroundService
         Online = state.Online,
         IsCluster = state.IsCluster,
         Status = state.Status,
-        Error = state.Error,
-        CheckedUtc = state.CheckedUtc
+        Error = state.Error
     };
 }

@@ -14,13 +14,8 @@
             <label class="quasar-field se-narrow">
                 Backpack limit
                 <input type="number" min="-1" max="1000" @bind="Values.BackpackLimit" />
-                <small>Backpacks (dropped inventories) each player may have. Empty ones are deleted after 30 seconds. -1 for no limit.</small>
+                <small>Backpacks (dropped inventories) each player may have, counted per player. Empty ones and the oldest over the limit, even with items in them, are deleted after 30 seconds. -1 for no limit.</small>
             </label>
-            <label class="quasar-check" title="Cuts mods and block limits from matchmaking server info.">
-                <input type="checkbox" @bind="Values.CutGameTags" /> Cut game tags
-            </label>
-            <p class="se-hint">Cut game tags removes mods and block limits from the server browser info, which avoids
-                "error downloading session settings". The server needs a restart for it to change.</p>
         </div>
     </div>
 </section>

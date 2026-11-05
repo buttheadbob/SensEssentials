@@ -1,23 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
-using System.Timers;
-using Sandbox;
 using Sandbox.Game.Multiplayer;
 using Sandbox.Game.World;
-using Timer = System.Timers.Timer;
 
 namespace SensEssentials;
 
-public class SimSpeedEvents : IDisposable
+public class SimSpeedEvents() : GameThreadTimer("sim speed events")
 {
-    private static SimSpeedEvents _instance = null!;
+    private static SimSpeedEvents? _instance;
     public static SimSpeedEvents Instance => _instance ??= new SimSpeedEvents();
 
-    private Timer? _timer;
-    private int _tickQueued;
-    private readonly Dictionary<AutoCommand, State> _states = new Dictionary<AutoCommand, State>();
+    private readonly Dictionary<AutoCommand, State> _states = [];
 
     private class State
     {
@@ -26,56 +20,7 @@ public class SimSpeedEvents : IDisposable
         public bool HysteresisCleared = true;
     }
 
-    public void Start()
-    {
-        if (_timer != null)
-            return;
-
-        _timer = new Timer(1000);
-        _timer.Elapsed += TimerElapsed;
-        _timer.AutoReset = true;
-        _timer.Start();
-    }
-
-    public void Stop()
-    {
-        _timer?.Dispose();
-        _timer = null;
-    }
-
-    private void TimerElapsed(object? sender, ElapsedEventArgs e)
-    {
-        // Evaluate on the game thread; skip this tick if the previous one has not been processed yet.
-        if (Interlocked.Exchange(ref _tickQueued, 1) == 1)
-            return;
-
-        try
-        {
-            MySandboxGame.Static.Invoke(() =>
-            {
-                try
-                {
-                    Tick();
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "Error encountered during sim speed update!");
-                }
-                finally
-                {
-                    Interlocked.Exchange(ref _tickQueued, 0);
-                }
-            }, "SensEssentials SimSpeedEvents");
-        }
-        catch (Exception ex)
-        {
-            // The game is shutting down; let the next tick try again.
-            Interlocked.Exchange(ref _tickQueued, 0);
-            Log.Debug($"Could not queue sim speed update: {ex.Message}");
-        }
-    }
-
-    private void Tick()
+    protected override void Tick()
     {
         var config = EssentialsCore.Config;
         if (config == null)
@@ -92,10 +37,7 @@ public class SimSpeedEvents : IDisposable
 
         foreach (var cmd in commands)
         {
-            if (cmd.IsRunning())
-                continue;
-
-            if (cmd.Steps.Count == 0)
+            if (cmd.IsBlocked() || cmd.Steps.Count == 0)
                 continue;
 
             if (!_states.TryGetValue(cmd, out var state))
@@ -115,6 +57,10 @@ public class SimSpeedEvents : IDisposable
                 // The cooldown only delays the next fire.
                 if (cmd.HysteresisEnabled && !state.HysteresisCleared && IsRecovered(cmd, simSpeed))
                     state.HysteresisCleared = true;
+            }
+            else if (cmd.IsRunning())
+            {
+                state.ConditionMetAt = DateTime.MinValue;
             }
             else if (cmd.HysteresisEnabled && !state.HysteresisCleared)
             {

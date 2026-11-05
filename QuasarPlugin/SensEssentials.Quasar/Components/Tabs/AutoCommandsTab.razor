@@ -160,7 +160,7 @@
     private static string TriggerDescription(Trigger trigger) => trigger switch
     {
         Trigger.Disabled => "This command never runs on its own. You can still run it with !admin runauto <name>.",
-        Trigger.Timed => "Runs the steps over and over, waiting the Repeat Every time between runs.",
+        Trigger.Timed => "Waits the Repeat Every time, runs the steps, and starts over.",
         Trigger.Scheduled => "Runs the steps once a day at the Time Of Day (server time), on the chosen day or every day.",
         Trigger.OnStart => "Runs the steps once, shortly after the server has finished starting.",
         Trigger.GridCount => "Checks the number of grids every Check Every interval and runs the steps when the comparison is true. It will not start again while a previous run is still going.",

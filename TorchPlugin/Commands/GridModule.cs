@@ -11,19 +11,19 @@ public class GridModule : EssentialsModule
     private GridActions Actions => new(Call);
 
     [Command("setowner", "Sets grid ownership to the given player or ID.", "Usage: setowner <grid> <newowner>")]
-    [Permission(MyPromoteLevel.SpaceMaster)]
+    [Permission(MyPromoteLevel.Admin)]
     public void SetOwner(string gridName, string playerName) => Actions.SetOwner(gridName, playerName);
 
-    [Command("ejectall", "Ejects all Players from given grid.")]
-    [Permission(MyPromoteLevel.SpaceMaster)]
+    [Command("ejectall", "Ejects all players from the given grid, or from the grid you are looking at.")]
+    [Permission(MyPromoteLevel.Admin)]
     public void Eject(string? gridName = null) => Actions.Eject(gridName);
 
     [Command("static large", "Makes all large grids static.")]
-    [Permission(MyPromoteLevel.SpaceMaster)]
+    [Permission(MyPromoteLevel.Admin)]
     public void StaticLarge() => Actions.StaticLarge();
 
     [Command("stopall", "Stops all moving grids.")]
-    [Permission(MyPromoteLevel.SpaceMaster)]
+    [Permission(MyPromoteLevel.Admin)]
     public void StopAll() => Actions.StopAll();
 
     [Command("list", "Lists all grids where you own the most blocks. Shows positions or GPS markers if the server admin enables the option.")]

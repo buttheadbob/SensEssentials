@@ -2,7 +2,6 @@
 using Sandbox.Engine.Voxels;
 using Sandbox.Game.Entities;
 using Sandbox.Game.Entities.Character;
-using Sandbox.Game.World.Generator;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -20,139 +19,59 @@ namespace SensEssentials.Commands;
 /// </summary>
 public sealed class VoxelActions(ICommandContext context) : CommandActions(context)
 {
-    private const BindingFlags AnyInstance = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-    private static readonly FieldInfo? AsteroidsModuleField = typeof(MyProceduralWorldGenerator).GetField("m_asteroidsModule", AnyInstance);
-    private static readonly FieldInfo? IsClosingEntitiesField = typeof(MyProceduralAsteroidCellGenerator).GetField("m_isClosingEntities", AnyInstance);
+    public void ResetAll(bool deleteStorage) => ResetMaps(MyEntities.GetEntities().OfType<MyVoxelBase>(), deleteStorage);
 
-    // Looked up each time: the generator belongs to the session, so a cached one goes stale after a world reload.
-    private static MyProceduralAsteroidCellGenerator? GeneratorInstance =>
-        MyProceduralWorldGenerator.Static == null ? null : AsteroidsModuleField?.GetValue(MyProceduralWorldGenerator.Static) as MyProceduralAsteroidCellGenerator;
-
-    public void ResetAll(bool deleteStorage)
-    {
-        var voxelMaps = MyEntities.GetEntities().OfType<MyVoxelBase>().ToList();
-
-        var resetIds = new List<long>();
-        int count = 0;
-
-        foreach (var map in voxelMaps)
-        {
-            try
-            {
-                if (map.StorageName == null || map.Storage.DataProvider == null)
-                    continue;
-
-                count++;
-
-                long id = map.EntityId;
-
-                if (deleteStorage && map is MyVoxelMap)
-                {
-                    using (PinDelete())
-                        map.Close();
-                }
-                else
-                {
-                    map.Storage.Reset(MyStorageDataTypeFlags.All);
-                    resetIds.Add(id);
-                }
-            }
-            catch (Exception e)
-            {
-                Log.Error(e, $"Could not reset voxel map {map.StorageName}");
-            }
-        }
-
-        EssentialsCore.Host.NotifyVoxelsReset(resetIds.ToArray());
-
-        Context.Respond($"Reset {count} voxel maps.");
-    }
-
-    public void CleanupAsteroids(bool deleteStorage)
-    {
-        var voxelMaps = MyEntities.GetEntities().OfType<MyVoxelMap>().ToList();
-
-        var resetIds = new List<long>();
-        int count = 0;
-
-        foreach (var map in voxelMaps)
-        {
-            try
-            {
-                if (map.StorageName == null || map.Storage.DataProvider == null)
-                    continue;
-
-                var s = map.PositionComp.WorldVolume;
-                var nearEntities = new List<MyEntity>();
-
-                MyGamePruningStructure.GetAllTopMostEntitiesInSphere(ref s, nearEntities);
-
-                if (nearEntities.Any(e => e is MyCubeGrid || e is MyCharacter))
-                    continue;
-
-                count++;
-
-                long id = map.EntityId;
-
-                if (deleteStorage)
-                {
-                    using (PinDelete())
-                        map.Close();
-                }
-                else
-                {
-                    map.Storage.Reset(MyStorageDataTypeFlags.All);
-                    resetIds.Add(id);
-                }
-            }
-            catch (Exception e)
-            {
-                Log.Error(e, $"Could not reset voxel map {map.StorageName}");
-            }
-        }
-
-        EssentialsCore.Host.NotifyVoxelsReset(resetIds.ToArray());
-
-        Context.Respond($"Reset {count} voxel maps.");
-    }
+    public void CleanupAsteroids(bool deleteStorage) =>
+        ResetMaps(MyEntities.GetEntities().OfType<MyVoxelMap>(), deleteStorage, map => map.PositionComp.WorldVolume);
 
     public void CleanupAsteroidsDistant(double distance, bool deleteStorage)
     {
+        if (!(distance >= 0))
+        {
+            Context.Respond("Invalid distance!");
+            return;
+        }
 
-        var voxelMaps = MyEntities.GetEntities().OfType<MyVoxelMap>().ToList();
+        ResetMaps(MyEntities.GetEntities().OfType<MyVoxelMap>(), deleteStorage, map => new BoundingSphereD(map.PositionComp.GetPosition(), distance));
+    }
 
+    public void ResetPlanets() => ResetMaps(MyEntities.GetEntities().OfType<MyPlanet>(), false);
+
+    /// <summary>
+    /// Resets the maps, or deletes the asteroids among them. With keepClear, a map with a grid or character in that area is left alone.
+    /// </summary>
+    private void ResetMaps(IEnumerable<MyVoxelBase> maps, bool deleteStorage, Func<MyVoxelBase, BoundingSphereD>? keepClear = null)
+    {
         var resetIds = new List<long>();
         int count = 0;
 
-        foreach (var map in voxelMaps)
+        foreach (var map in maps.ToList())
         {
             try
             {
                 if (map.StorageName == null || map.Storage.DataProvider == null)
                     continue;
 
-                var s = new BoundingSphereD(map.PositionComp.GetPosition(), distance);
-                var nearEntities = new List<MyEntity>();
-
-                MyGamePruningStructure.GetAllTopMostEntitiesInSphere(ref s, nearEntities);
-
-                if (nearEntities.Any(e => e is MyCubeGrid || e is MyCharacter))
-                    continue;
-
-                count++;
-
-                long id = map.EntityId;
-
-                if (deleteStorage)
+                if (keepClear != null)
                 {
-                    using (PinDelete())
-                        map.Close();
+                    var area = keepClear(map);
+                    var nearEntities = new List<MyEntity>();
+                    MyGamePruningStructure.GetAllTopMostEntitiesInSphere(ref area, nearEntities);
+                    if (nearEntities.Any(e => e is MyCubeGrid or MyCharacter))
+                        continue;
+                }
+
+                if (deleteStorage && map is MyVoxelMap)
+                {
+                    DeleteMap(map);
                 }
                 else
                 {
                     map.Storage.Reset(MyStorageDataTypeFlags.All);
-                    resetIds.Add(id);
+                    resetIds.Add(map.EntityId);
                 }
+
+                count++;
             }
             catch (Exception e)
             {
@@ -160,36 +79,24 @@ public sealed class VoxelActions(ICommandContext context) : CommandActions(conte
             }
         }
 
-        EssentialsCore.Host.NotifyVoxelsReset(resetIds.ToArray());
-
-        Context.Respond($"Reset {count} voxel maps.");
+        EssentialsCore.Host.NotifyVoxelsReset([.. resetIds]);
+        Context.Respond(resetIds.Count > 0 ? WithReloadNote($"Reset {count} voxel maps.") : $"Reset {count} voxel maps.");
     }
 
-    public void ResetPlanets()
+    /// <summary>
+    /// The game's close request also removes an untouched asteroid from clients, which Close alone does not. The
+    /// asteroid generator hooks the request to stop that asteroid ever coming back, so that hook is cleared first.
+    /// </summary>
+    private static void DeleteMap(MyVoxelBase map)
     {
-        var voxelMaps = MyEntities.GetEntities().OfType<MyPlanet>();
-
-        var resetIds = new List<long>();
-
-        foreach (var map in voxelMaps)
-        {
-            try
-            {
-                if (map.StorageName == null || map.Storage.DataProvider == null)
-                    continue;
-
-                map.Storage.Reset(MyStorageDataTypeFlags.All);
-                resetIds.Add(map.EntityId);
-            }
-            catch (Exception e)
-            {
-                Log.Error(e, $"Could not reset voxel map {map.StorageName}");
-            }
-        }
-
-        EssentialsCore.Host.NotifyVoxelsReset(resetIds.ToArray());
-        Context.Respond($"Reset {resetIds.Count} voxel maps.");
+        map.OnEntityCloseRequest = null;
+        MyEntities.SendCloseRequest(map);
+        if (!map.MarkedForClose)
+            map.Close();
     }
+
+    private static string WithReloadNote(string text) =>
+        EssentialsCore.Host.CanReloadVoxels ? text : text + " Players see it after they reconnect.";
 
     public void ResetPlanet(string planetName)
     {
@@ -209,7 +116,7 @@ public sealed class VoxelActions(ICommandContext context) : CommandActions(conte
                 var map = maps[0];
                 map.Storage.Reset(MyStorageDataTypeFlags.All);
                 EssentialsCore.Host.NotifyVoxelsReset([map.EntityId]);
-                Context.Respond($"Reset planet {map.Name}");
+                Context.Respond(WithReloadNote($"Reset planet {map.Name}"));
                 return;
             default:
                 Context.Respond($"Found {maps.Count} planets matching '{planetName}'. Please select from list:");
@@ -239,9 +146,7 @@ public sealed class VoxelActions(ICommandContext context) : CommandActions(conte
             return;
         }
 
-        Context.Respond(ResetVoxelInArea(entity.PositionComp.GetPosition(), radius)
-            ? "Voxel reset complete!" 
-            : "Couldn't reset voxels! Check log for more information!");
+        ReportArea(ResetVoxelInArea(entity.PositionComp.GetPosition(), radius));
     }
 
     public void ResetVoxelGps()
@@ -256,7 +161,7 @@ public sealed class VoxelActions(ICommandContext context) : CommandActions(conte
             return;
         }
 
-        if (!double.TryParse(args[args.Count - 1], NumberStyles.Float, CultureInfo.InvariantCulture, out var radius) || radius <= 0)
+        if (!double.TryParse(args[args.Count - 1], NumberStyles.Float, CultureInfo.InvariantCulture, out var radius) || !(radius > 0) || double.IsInfinity(radius))
         {
             Context.Respond("Invalid radius!");
             return;
@@ -268,10 +173,15 @@ public sealed class VoxelActions(ICommandContext context) : CommandActions(conte
             return;
         }
 
-        Context.Respond(ResetVoxelInArea(resetTarget, (float)radius)
-            ? "Voxel reset complete!"
-            : "Couldn't reset voxels! Check log for more information!");
+        ReportArea(ResetVoxelInArea(resetTarget, (float)radius));
     }
+
+    private void ReportArea(int? maps) => Context.Respond(maps switch
+    {
+        null => "Couldn't reset voxels! Check log for more information!",
+        0 => "No voxels found in that area.",
+        _ => "Voxel reset complete!"
+    });
 
     private static bool TryParsePosition(string text, out Vector3D position)
     {
@@ -285,11 +195,11 @@ public sealed class VoxelActions(ICommandContext context) : CommandActions(conte
             var gpsParts = text.Split(':');
             if (gpsParts.Length < 5)
                 return false;
-            parts = new[] { gpsParts[2], gpsParts[3], gpsParts[4] };
+            parts = [gpsParts[2], gpsParts[3], gpsParts[4]];
         }
         else
         {
-            parts = text.Split(new[] { ':', ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            parts = text.Split([':', ' ', ','], StringSplitOptions.RemoveEmptyEntries);
         }
 
         if (parts.Length != 3)
@@ -304,25 +214,25 @@ public sealed class VoxelActions(ICommandContext context) : CommandActions(conte
         return true;
     }
 
-    public static bool ResetVoxelInArea(Vector3D center, float radius, bool updatePlayers = true)
+    /// <summary>
+    /// Reverts voxels in a sphere. Returns how many voxel maps were reset, or null when it failed.
+    /// </summary>
+    private static int? ResetVoxelInArea(Vector3D center, float radius)
     {
         try
         {
-            BoundingSphereD Sphere = new BoundingSphereD(center, radius);
+            BoundingSphereD sphere = new(center, radius);
             // Use our own list: MyEntities.GetEntitiesInSphere returns SE's shared list, which callers must clear.
             var found = new List<MyEntity>();
-            MyGamePruningStructure.GetAllEntitiesInSphere(ref Sphere, found);
-            List<MyVoxelBase> Maps = found.OfType<MyVoxelBase>().ToList();
-            if (Maps.Count == 0)
-                return true;
+            MyGamePruningStructure.GetAllEntitiesInSphere(ref sphere, found);
+            // A planet shows up as many physics chunks that share one root.
+            var maps = found.OfType<MyVoxelBase>().Select(v => v.RootVoxel).Where(v => !v.MarkedForClose).Distinct().ToList();
 
-            var m = typeof(MyVoxelBase).GetMethod("PerformVoxelOperationSphere_Implementation", BindingFlags.Instance | BindingFlags.NonPublic);
+            // The public request refuses a revert around characters and grids, so the event is raised directly.
+            var revert = typeof(MyVoxelBase).GetMethod("PerformVoxelOperationSphere_Implementation", BindingFlags.Instance | BindingFlags.NonPublic);
 
-            foreach (var voxelMap in Maps)
+            foreach (var voxelMap in maps)
             {
-                if (voxelMap.MarkedForClose)
-                    continue;
-
                 MyShapeSphere shape = new()
                 {
                     Center = center,
@@ -331,46 +241,16 @@ public sealed class VoxelActions(ICommandContext context) : CommandActions(conte
 
                 MyVoxelGenerator.RevertShape(voxelMap, shape);
 
-                if (updatePlayers && m != null)
-                    Events.RaiseEvent<MyVoxelBase, Vector3D, float, byte, OperationType>(voxelMap.RootVoxel, m, shape.Center, shape.Radius, 0, MyVoxelBase.OperationType.Revert);
-
+                if (revert != null)
+                    Events.RaiseEvent<MyVoxelBase, Vector3D, float, byte, OperationType>(voxelMap, revert, shape.Center, shape.Radius, 0, MyVoxelBase.OperationType.Revert);
             }
-            return true;
+
+            return maps.Count;
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Voxel reset failed!");
-            return false;
-        }
-    }
-
-    private static LockToken? PinDelete()
-    {
-        /*
-         * If SEWorldGenerator Plugin is used or Procedural Seed is 0 there
-         * will be no GeneratorInstance. In this case this Method will NRE.
-         *
-         * However we still would like to delete stuff. So just return null.
-         * Because when there is no GeneratorInstance we dont have to tell it
-         * entities are being deleted.
-         */
-        var generator = GeneratorInstance;
-        return generator == null ? null : new LockToken(generator);
-    }
-
-    private class LockToken : IDisposable
-    {
-        private readonly MyProceduralAsteroidCellGenerator _generator;
-
-        public LockToken(MyProceduralAsteroidCellGenerator generator)
-        {
-            _generator = generator;
-            IsClosingEntitiesField?.SetValue(_generator, true);
-        }
-
-        public void Dispose()
-        {
-            IsClosingEntitiesField?.SetValue(_generator, false);
+            return null;
         }
     }
 }

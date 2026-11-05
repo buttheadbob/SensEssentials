@@ -1,5 +1,6 @@
 using Sandbox.Game.Entities;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
@@ -33,8 +34,17 @@ public sealed class CleanupActions(ICommandContext context) : CommandActions(con
 
     public void Delete()
     {
+        if (Context.Args.Count == 0)
+        {
+            Context.Respond("Nothing was deleted. Give at least one condition, or use !cleanup delete all to delete every grid without a pilot.");
+            return;
+        }
+
+        var deleteAll = Context.Args.Count == 1 && Context.Args[0].Equals("all", StringComparison.OrdinalIgnoreCase);
+        IReadOnlyList<string> conditions = deleteAll ? [] : Context.Args;
+
         var count = 0;
-        foreach (var grid in ConditionsChecker.ScanConditions(Context, Context.Args))
+        foreach (var grid in ConditionsChecker.ScanConditions(Context, conditions))
         {
             Log.Info($"Deleting grid: {grid.EntityId}: {grid.DisplayName}");
             Utilities.EjectPilots(grid);
@@ -59,7 +69,7 @@ public sealed class CleanupActions(ICommandContext context) : CommandActions(con
         Log.Info($"Cleanup deleted {count} floating objects");
     }
 
-    public void Help()
+    public void Conditions()
     {
         var sb = new StringBuilder();
         foreach (var c in ConditionsChecker.GetAllConditions())
@@ -68,6 +78,6 @@ public sealed class CleanupActions(ICommandContext context) : CommandActions(con
             sb.AppendLine($"   {c.HelpText}");
         }
 
-        Show("Cleanup help", null, sb.ToString());
+        Show("Cleanup conditions", null, sb.ToString());
     }
 }

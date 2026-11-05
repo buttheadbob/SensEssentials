@@ -14,7 +14,7 @@ public class Ownership
     /// </summary>
     public static long GetOwner(IEnumerable<MyCubeGrid> grids)
     {
-        Dictionary<long, int> ownerCounts = new();
+        Dictionary<long, int> ownerCounts = [];
 
         foreach (var block in grids.SelectMany(g => g.GetFatBlocks()))
         {
@@ -45,7 +45,7 @@ public class Ownership
 
     public static HashSet<long> GetAllOwnerIds(IEnumerable<MyCubeGrid> grids)
     {
-        HashSet<long> owners = new();
+        HashSet<long> owners = [];
 
         foreach (var block in grids.SelectMany(g => g.GetFatBlocks()))
         {
@@ -58,8 +58,6 @@ public class Ownership
         return owners;
     }
 
-    public static OwnerType GetOwnerType(MyCubeGrid grid) => GetOwnerType([grid]);
-
     /// <summary>
     /// Owner type of the majority owner. An owner whose identity no longer exists counts as Nobody.
     /// </summary>
@@ -70,6 +68,16 @@ public class Ownership
             return OwnerType.Nobody;
 
         return IsNpcIdentity(ownerId) ? OwnerType.Npc : OwnerType.Player;
+    }
+
+    /// <summary>
+    /// The pirate identity, or a member of its faction, however many members that has.
+    /// </summary>
+    public static bool IsPirate(long identityId)
+    {
+        var pirates = MyPirateAntennas.GetPiratesId();
+        return identityId == pirates
+            || MySession.Static.Factions.GetPlayerFaction(pirates)?.Members.ContainsKey(identityId) == true;
     }
 
     /// <summary>

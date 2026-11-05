@@ -25,11 +25,11 @@ public class VoxelModule : EssentialsModule
     [Command("reset planet", "Resets the planet with a given name.")]
     public void ResetPlanet(string planetName) => Actions.ResetPlanet(planetName);
 
-    [Command("reset area", "Resets voxel damange in specified radius from player")]
+    [Command("reset area", "Resets voxel damage in specified radius from player")]
     [Permission(MyPromoteLevel.Admin)]
     public void ResetVoxelArea(float radius) => Actions.ResetVoxelArea(radius);
 
-    [Command("reset gps", "Resets voxel damange in specified radius from given point. Usage: !voxels reset gps <x y z | x:y:z | GPS:Name:x:y:z:> <radius>")]
+    [Command("reset gps", "Resets voxel damage in specified radius from given point. Usage: !voxels reset gps <x y z | x:y:z | GPS:Name:x:y:z:> <radius>")]
     [Permission(MyPromoteLevel.Admin)]
     public void ResetVoxelGps() => Actions.ResetVoxelGps();
 }

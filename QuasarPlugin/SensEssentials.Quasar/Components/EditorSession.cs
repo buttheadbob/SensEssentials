@@ -14,7 +14,12 @@ public sealed class EditorSession
 
     private Action? _undo;
 
-    public void Edited() => Changed?.Invoke();
+    public void Edited()
+    {
+        Message = null;
+        _undo = null;
+        Changed?.Invoke();
+    }
 
     public void Say(string message)
     {

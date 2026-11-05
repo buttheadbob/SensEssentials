@@ -31,9 +31,23 @@ public static class DiscordLogging
 
     private const int MaxQueued = 500;
     private const int MessageLimit = 1500;
+    private const int ExceptionMessageLimit = 500;
+    private static readonly TimeSpan GonePause = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan StopWait = TimeSpan.FromSeconds(3);
 
-    private static readonly ConcurrentQueue<(string Url, DiscordMessage Message)> Queue = new();
-    private static readonly SemaphoreSlim Signal = new(0);
+    /// <summary>
+    /// One webhook's queue. Each has its own sender, so a slow or failing webhook cannot hold up the others.
+    /// </summary>
+    private sealed class Webhook(string url)
+    {
+        public string Url { get; } = url;
+        public ConcurrentQueue<DiscordMessage> Queue { get; } = new();
+        public SemaphoreSlim Signal { get; } = new(0);
+        public DateTime PausedUntil { get; set; }
+        public Task? Sender { get; set; }
+    }
+
+    private static readonly Dictionary<string, Webhook> Webhooks = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, RateWindow> Windows = new(StringComparer.Ordinal);
     private static readonly object WindowLock = new();
 
@@ -42,6 +56,7 @@ public static class DiscordLogging
     private static CancellationTokenSource? _cts;
     private static int _queued;
     private static int _queueFullDrops;
+    private static volatile bool _stopping;
 
     /// <summary>
     /// Shown as the sender name in Discord, so several servers can share one channel.
@@ -67,18 +82,46 @@ public static class DiscordLogging
 
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
-        Task.Factory.StartNew(() => SendLoop(token), token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        Task.Run(() => NoticeLoop(token), token);
     }
 
+    /// <summary>
+    /// Stops taking entries and gives what is queued a moment to go out, since the last entries before a shutdown
+    /// are often the ones that matter.
+    /// </summary>
     public static void Stop()
     {
-        _cts?.Cancel();
-        _cts = null;
+        var cts = _cts;
+        if (cts == null)
+            return;
 
-        if (_config != null)
-            _config.PropertyChanged -= OnConfigChanged;
+        _config?.PropertyChanged -= OnConfigChanged;
         _config = null;
         _handlers = [];
+
+        _stopping = true;
+        List<Webhook> webhooks;
+        lock (WindowLock)
+            webhooks = [.. Webhooks.Values];
+
+        foreach (var webhook in webhooks)
+            webhook.Signal.Release();
+
+        try
+        {
+            Task.WaitAll([.. webhooks.Where(w => w.Sender != null).Select(w => w.Sender!)], StopWait);
+        }
+        catch (AggregateException)
+        {
+            // A sender ended on an error it has already reported.
+        }
+
+        cts.Cancel();
+        _cts = null;
+        lock (WindowLock)
+            Webhooks.Clear();
+        Interlocked.Exchange(ref _queued, 0);
+        _stopping = false;
     }
 
     private static void LogWarn(string message, Exception? exception = null) =>
@@ -124,7 +167,7 @@ public static class DiscordLogging
             var config = _config;
             _handlers = config == null || !config.DiscordLoggingEnabled
                 ? []
-                : config.DiscordLogHandlers.ToArray();
+                : [.. config.DiscordLogHandlers];
         }
         catch (InvalidOperationException)
         {
@@ -171,6 +214,24 @@ public static class DiscordLogging
 
     private static void Enqueue(string url, DiscordMessage message)
     {
+        var token = _cts?.Token;
+        if (token == null)
+            return;
+
+        Webhook? webhook;
+        lock (WindowLock)
+        {
+            if (!Webhooks.TryGetValue(url, out webhook))
+            {
+                var created = webhook = new Webhook(url);
+                Webhooks[url] = created;
+                created.Sender = Task.Run(() => SendLoop(created, token.Value));
+            }
+        }
+
+        if (DateTime.UtcNow < webhook.PausedUntil)
+            return;
+
         if (Interlocked.Increment(ref _queued) > MaxQueued)
         {
             Interlocked.Decrement(ref _queued);
@@ -178,27 +239,54 @@ public static class DiscordLogging
             return;
         }
 
-        Queue.Enqueue((url, message));
-        Signal.Release();
+        webhook.Queue.Enqueue(message);
+        webhook.Signal.Release();
     }
 
-    private static async Task SendLoop(CancellationToken token)
+    private static async Task NoticeLoop(CancellationToken token)
     {
         while (!token.IsCancellationRequested)
         {
             try
             {
-                // Wakes for new messages, or once a second to report dropped ones.
-                await Signal.WaitAsync(1000, token).ConfigureAwait(false);
+                await Task.Delay(1000, token).ConfigureAwait(false);
                 QueueDropNotices();
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception e)
+            {
+                LogWarn("Could not report dropped Discord entries", e);
+            }
+        }
+    }
 
-                while (Queue.TryDequeue(out var item))
+    private static async Task SendLoop(Webhook webhook, CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                await webhook.Signal.WaitAsync(1000, token).ConfigureAwait(false);
+
+                while (webhook.Queue.TryDequeue(out var message))
                 {
                     Interlocked.Decrement(ref _queued);
-                    var (result, detail) = await DiscordWebhook.SendAsync(item.Url, item.Message, token).ConfigureAwait(false);
+                    var (result, detail) = await DiscordWebhook.SendAsync(webhook.Url, message, token).ConfigureAwait(false);
+                    if (result == SendResult.Gone)
+                    {
+                        Pause(webhook, detail);
+                        break;
+                    }
+
                     if (result != SendResult.Sent)
                         LogWarn($"Could not post a log entry to Discord: {detail}");
                 }
+
+                if (_stopping)
+                    return;
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
@@ -209,6 +297,18 @@ public static class DiscordLogging
                 LogWarn("Could not post a log entry to Discord", e);
             }
         }
+    }
+
+    /// <summary>
+    /// A deleted webhook fails every time, so it is left alone for a while instead of being tried for every entry.
+    /// </summary>
+    private static void Pause(Webhook webhook, string detail)
+    {
+        webhook.PausedUntil = DateTime.UtcNow + GonePause;
+        while (webhook.Queue.TryDequeue(out _))
+            Interlocked.Decrement(ref _queued);
+
+        LogWarn($"A Discord webhook no longer works, so it is skipped for {GonePause.TotalMinutes:0} minutes. Check its URL. {detail}");
     }
 
     #region Rate limit
@@ -300,11 +400,11 @@ public static class DiscordLogging
         var sb = new StringBuilder();
         sb.AppendLine(CodeBlock(DiscordWebhook.Shorten(logEvent.Message, MessageLimit), "No message"));
 
-        string? attachment = null;
+        var cut = logEvent.Message.Length > MessageLimit;
         if (exception != null)
         {
             sb.AppendLine($"**{Escape(exception.GetType().FullName ?? "Exception")}**");
-            sb.AppendLine(CodeBlock(DiscordWebhook.Shorten(exception.Message ?? "", 500), "No exception message"));
+            sb.AppendLine(CodeBlock(DiscordWebhook.Shorten(exception.Message ?? "", ExceptionMessageLimit), "No exception message"));
 
             var inner = exception.GetBaseException();
             if (inner != exception)
@@ -316,17 +416,18 @@ public static class DiscordLogging
             else if (stack.Length > 0)
                 sb.AppendLine("Stack trace attached.");
 
-            // The full exception, including inner exceptions, whenever any part had to be cut.
-            if (stack.Length > stackLimit || inner != exception)
-                attachment = exception.ToString();
+            cut |= stack.Length > stackLimit || inner != exception || (exception.Message?.Length ?? 0) > ExceptionMessageLimit;
         }
 
         var description = sb.ToString();
         if (description.Length > DiscordWebhook.MaxDescription)
         {
-            attachment ??= $"{logEvent.Message}\n\n{exception}";
+            cut = true;
             description = DiscordWebhook.Shorten(description, DiscordWebhook.MaxDescription - 40) + "\nFull entry attached.";
         }
+
+        // The whole entry, including inner exceptions, whenever any part had to be cut.
+        var attachment = cut ? $"{logEvent.Message}\n\n{exception}".Trim() : null;
 
         return new DiscordMessage
         {

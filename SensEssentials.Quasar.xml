@@ -18,12 +18,12 @@
 Shared configs for the Sens Essentials Magnetar plugin, for admins running several servers.
 
 Create named configs on the Sens Essentials page and choose which servers follow each one. Saving a config sends it
-to every server following it within seconds; servers that are offline get it as soon as they connect. While a server
-follows a shared config, changes made to Sens Essentials on that server's Plugins page are undone, so the config
-stays the same everywhere. A config can also be started from the settings of a server you already set up.
+to every server following it within seconds; offline servers get it when they connect. While a server follows a
+shared config, changes made to Sens Essentials on that server's Plugins page are undone. A config can also be started
+from the settings of a server you already set up.
 
-The editor has the same tabs as the Torch plugin: General, MOTD, Auto Commands, Sim Speed, Info Commands, Block
-Presets, Cleanup Presets, Discord Logging, Admin Tools and Instructions, with warnings for items that need attention.
+The editor has most of the Torch plugin's tabs, plus Servers, with warnings for items that need attention. Choosing a
+config for a server replaces its settings once you confirm.
 
 Needs the Sens Essentials Magnetar plugin on the servers. Includes a small companion Magnetar plugin
 (sensessentials.quasar) that Quasar adds to managed servers; restart servers that were running when this plugin was
@@ -42,6 +42,5 @@ enabled. Cluster nodes are not managed, a cluster's plugins are configured throu
         <CompanionPluginId>sensessentials.quasar</CompanionPluginId>
     </CompanionPluginIds>
 
-    <!-- TODO: the commit hash of the version to publish -->
-    <Commit>TODO Git commit hash</Commit>
+    <Commit>35e47c8bf941b874a7ad0ff441814e9699dbec25</Commit>
 </PluginData>

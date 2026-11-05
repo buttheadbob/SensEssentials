@@ -60,7 +60,8 @@ namespace SensEssentials.QuasarCompanion
                 switch (request.Operation)
                 {
                     case SharedConfigOperations.Status:
-                        status = await OnGameThread(GetStatus, cancellationToken).ConfigureAwait(false);
+                        // Only reads one field, so it does not wait for the game thread and stall the agent during a world load.
+                        status = GetStatus();
                         break;
 
                     case SharedConfigOperations.Apply:

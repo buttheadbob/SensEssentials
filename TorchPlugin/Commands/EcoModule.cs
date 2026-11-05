@@ -10,7 +10,7 @@ public class EcoModule : EssentialsModule
 {
     private EcoActions Actions => new(Call);
 
-    [Command("give", "Add a specified anount of credits into a users account. Use '*' to affect all players")]
+    [Command("give", "Add a specified amount of credits into a users account. Use '*' to affect all players")]
     [Permission(MyPromoteLevel.Admin)]
     public void EcoGive(string player, long amount, bool onlyOnline = false, bool excludeNpcs = true) => Actions.EcoGive(player, amount, onlyOnline, excludeNpcs);
 
@@ -18,7 +18,7 @@ public class EcoModule : EssentialsModule
     [Permission(MyPromoteLevel.Admin)]
     public void EcoTake(string player, long amount, bool onlyOnline = false, bool excludeNpcs = true) => Actions.EcoTake(player, amount, onlyOnline, excludeNpcs);
 
-    [Command("set", "Set a users account to a specifed balance. Use '*' to affect all players")]
+    [Command("set", "Set a users account to a specified balance. Use '*' to affect all players")]
     [Permission(MyPromoteLevel.Admin)]
     public void EcoSet(string player, long amount, bool onlyOnline = false, bool excludeNpcs = true) => Actions.EcoSet(player, amount, onlyOnline, excludeNpcs);
 

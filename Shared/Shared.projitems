@@ -10,6 +10,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)Commands\AdminActions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Features\GameThreadTimer.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Config\TimeFormat.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Utils\BlockLookup.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Commands\BlocksActions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Commands\CleanupActions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Commands\EcoActions.cs" />
@@ -46,8 +49,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)Features\Motd.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Features\SimSpeedEvents.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Features\SuitRefill.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Patches\GameTagsPatch.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Patches\SessionDownloadPatch.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Utils\Events.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Utils\GridFinder.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Utils\Ownership.cs" />

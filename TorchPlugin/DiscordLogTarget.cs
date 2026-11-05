@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
@@ -14,17 +15,32 @@ public sealed class DiscordLogTarget : Target
 {
     private const string TargetName = "SensEssentialsDiscord";
     private static LoggingRule? _rule;
+    private static EssentialsLogLevel? _level;
 
-    public static void Install()
+    /// <summary>
+    /// Keeps the log rule in step with the settings. A rule makes NLog build every entry at its level for all of
+    /// Torch and the plugins, so it only exists while a handler wants those entries, and at the lowest level any uses.
+    /// </summary>
+    public static void Update(EssentialsConfig config)
     {
-        if (_rule != null)
+        var handlers = config.DiscordLoggingEnabled ? config.DiscordLogHandlers.Where(h => h.Enabled).ToList() : [];
+        EssentialsLogLevel? wanted = handlers.Count > 0 ? handlers.Min(h => h.MinLevel) : null;
+        if (wanted == _level)
             return;
 
+        Uninstall();
+        _level = wanted;
+        if (wanted != null)
+            Install(NLog.LogLevel.FromOrdinal((int)wanted.Value));
+    }
+
+    private static void Install(NLog.LogLevel level)
+    {
         // Assigning the configuration again makes NLog initialise the new target.
         var nlog = LogManager.Configuration ?? new LoggingConfiguration();
         var target = new DiscordLogTarget { Name = TargetName };
         nlog.AddTarget(TargetName, target);
-        _rule = new LoggingRule("*", NLog.LogLevel.Trace, target);
+        _rule = new LoggingRule("*", level, target);
         // First, so rules marked final further down do not hide entries from Discord.
         nlog.LoggingRules.Insert(0, _rule);
         LogManager.Configuration = nlog;

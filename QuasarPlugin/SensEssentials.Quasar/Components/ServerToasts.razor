@@ -1,0 +1,93 @@
+@implements IDisposable
+@inject SharedConfigSync Sync
+
+@if (_toasts.Count > 0)
+{
+    <div class="se-toasts" role="status" aria-live="polite">
+        @foreach (var toast in _toasts)
+        {
+            <div class="se-toast @toast.Tone" @key="toast">
+                <span>@toast.Text</span>
+                <button type="button" class="se-toast-close" aria-label="Dismiss" @onclick="() => _toasts.Remove(toast)">×</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan ShownFor = TimeSpan.FromSeconds(10);
+
+    private sealed record Toast(string Text, string Tone, DateTimeOffset? RemoveAt);
+    private sealed record Waiting(string ServerId, string Name, string? ConfigId, string? ConfigName, long Revision, DateTimeOffset GiveUpAt);
+
+    private readonly List<Toast> _toasts = [];
+    private readonly List<Waiting> _waiting = [];
+    private Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        Sync.Changed += OnChanged;
+        _timer = new Timer(_ => OnChanged(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    public void Dispose()
+    {
+        Sync.Changed -= OnChanged;
+        _timer?.Dispose();
+    }
+
+    /// <summary>
+    /// Waits for a server to report the config (null when it was released), then shows the result.
+    /// </summary>
+    public void Track(string serverId, string name, SharedConfig? config)
+    {
+        _waiting.RemoveAll(w => w.ServerId == serverId);
+        _waiting.Add(new Waiting(serverId, name, config?.Id, config?.Name, config?.Revision ?? 0, DateTimeOffset.UtcNow + Patience));
+    }
+
+    private void OnChanged() => _ = InvokeAsync(Check);
+
+    private void Check()
+    {
+        if (_waiting.Count == 0 && _toasts.Count == 0)
+            return;
+
+        var servers = Sync.GetServers();
+        foreach (var wait in _waiting.ToList())
+        {
+            var server = servers.FirstOrDefault(s => s.ServerId == wait.ServerId);
+            if (server is not { Online: true })
+                Finish(wait, $"{wait.Name} is offline. It gets the change when it connects.", "se-toast-info");
+            else if (Applied(server, wait))
+                Finish(wait, wait.ConfigId == null
+                    ? $"{wait.Name} is now configured on its own."
+                    : $"{wait.Name} applied \"{wait.ConfigName}\" (revision {wait.Revision}).", "se-toast-success");
+            else if (server.Error != null)
+                Finish(wait, $"{wait.Name} did not apply the change: {server.Error}", "se-toast-error");
+            else if (DateTimeOffset.UtcNow >= wait.GiveUpAt)
+                Finish(wait, $"{wait.Name} has not confirmed the change yet. Check its status on the Servers tab.", "se-toast-error");
+        }
+
+        var removed = _toasts.RemoveAll(t => DateTimeOffset.UtcNow >= t.RemoveAt);
+        if (removed > 0 || _toasts.Count > 0)
+            StateHasChanged();
+    }
+
+    private static bool Applied(ServerState server, Waiting wait)
+    {
+        if (server.Status is not { } status)
+            return false;
+
+        return wait.ConfigId == null
+            ? string.IsNullOrEmpty(status.ConfigId)
+            : status.ConfigId == wait.ConfigId && status.Revision == wait.Revision;
+    }
+
+    private void Finish(Waiting wait, string text, string tone)
+    {
+        _waiting.Remove(wait);
+        // Errors stay until they are dismissed.
+        _toasts.Add(new Toast(text, tone, tone == "se-toast-error" ? null : DateTimeOffset.UtcNow + ShownFor));
+    }
+}

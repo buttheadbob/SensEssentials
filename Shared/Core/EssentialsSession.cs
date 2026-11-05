@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Sandbox.Engine.Multiplayer;
 using Sandbox.Game.Entities;
 using SensEssentials.Commands;
@@ -40,6 +41,7 @@ public static class EssentialsSession
         }, "hook player events");
 
         Run(() => MyEntities.OnEntityAdd += Backpacks.OnEntityAdded, "hook backpacks");
+        Run(Backpacks.TrackExisting, "find saved backpacks");
 
         if (EssentialsCore.Config.StopShipsOnStart)
             Run(StopShips, "stop ships");
@@ -66,6 +68,7 @@ public static class EssentialsSession
 
         Run(() => MyEntities.OnEntityAdd -= Backpacks.OnEntityAdded, "unhook backpacks");
         Run(AutoCommands.Instance.Stop, "stop auto commands");
+        Run(CancelAutoCommands, "cancel running auto commands");
         Run(SimSpeedEvents.Instance.Stop, "stop sim speed events");
         Run(VotingActions.VoteEnd, "end vote");
 
@@ -82,6 +85,7 @@ public static class EssentialsSession
     {
         Backpacks.Update();
         Run(SuitRefill.Update, "refill suits");
+        Run(Motd.Update, "show the MOTD");
     }
 
     /// <summary>
@@ -97,6 +101,12 @@ public static class EssentialsSession
     private static void OnClientJoined(ulong steamId, string name) => Run(() => Motd.OnPlayerJoined(steamId), "start the MOTD");
 
     private static void OnClientLeft(ulong steamId, MyChatMemberStateChangeEnum change) => Motd.OnPlayerLeft(steamId);
+
+    private static void CancelAutoCommands()
+    {
+        foreach (var command in EssentialsCore.Config.AutoCommands.Where(c => c.IsRunning()).ToList())
+            command.Cancel();
+    }
 
     private static void StopShips()
     {

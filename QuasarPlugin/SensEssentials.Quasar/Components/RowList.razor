@@ -69,10 +69,12 @@
 
     private void Remove(TItem item)
     {
-        var index = Items.IndexOf(item);
+        var list = Items;
+        var index = list.IndexOf(item);
         if (index < 0)
             return;
-        Items.RemoveAt(index);
-        Session?.Removed($"Removed a {ItemName}.", () => Items.Insert(Math.Min(index, Items.Count), item));
+        list.RemoveAt(index);
+        // Kept in a local: this component is reused for the next selected item, which has its own list.
+        Session?.Removed($"Removed {(ItemName.Length > 0 && "aeiou".Contains(ItemName[0]) ? "an" : "a")} {ItemName}.", () => list.Insert(Math.Min(index, list.Count), item));
     }
 }

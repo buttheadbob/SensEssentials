@@ -388,3 +388,74 @@
         align-items: flex-start;
     }
 }
+
+.se-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.se-modal {
+    width: min(32rem, 100%);
+    padding: 1.25rem;
+    border: 1px solid var(--quasar-palette-divider);
+    border-radius: 8px;
+    background: var(--quasar-palette-surface);
+}
+
+.se-modal h3 {
+    margin-top: 0;
+}
+
+.se-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.se-toasts {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 1001;
+    display: grid;
+    gap: 0.5rem;
+    width: min(26rem, calc(100vw - 2rem));
+}
+
+.se-toast {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--quasar-palette-divider);
+    border-left-width: 4px;
+    border-radius: 6px;
+    background: var(--quasar-palette-surface);
+}
+
+.se-toast-success {
+    border-left-color: var(--quasar-palette-primary);
+}
+
+.se-toast-info {
+    border-left-color: var(--quasar-palette-warning);
+}
+
+.se-toast-error {
+    border-left-color: var(--quasar-palette-error);
+}
+
+.se-toast-close {
+    border: 0;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+}

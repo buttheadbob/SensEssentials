@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -27,7 +26,7 @@ public sealed class VotingActions(ICommandContext context) : CommandActions(cont
 
     private static AutoCommand? _command;
     private static string? _voteInProgress;
-    private static readonly Dictionary<ulong, DateTime> VoteReg = [];
+    private static readonly HashSet<ulong> VoteReg = [];
     private static readonly Dictionary<ulong, DateTime> VoteCooldown = [];
     public static Status VoteStatus = Status.VoteStandby;
 
@@ -41,6 +40,12 @@ public sealed class VotingActions(ICommandContext context) : CommandActions(cont
         if (Context.Player == null)
         {
             Context.Respond("This is an in-game command");
+            return;
+        }
+
+        if (VoteStatus == Status.VoteCancel)
+        {
+            Context.Respond("The last vote is still ending. Try again in a moment.");
             return;
         }
 
@@ -62,19 +67,19 @@ public sealed class VotingActions(ICommandContext context) : CommandActions(cont
         var steamid = Context.Player.SteamUserId;
         if (VoteCooldown.TryGetValue(steamid, out var activeCooldown))
         {
-            var difference = activeCooldown - DateTime.Now;
+            var difference = activeCooldown - DateTime.UtcNow;
             if (difference.TotalSeconds > 0)
             {
                 Context.Respond($"Cooldown active. You can use this command again in {difference.Minutes:N0} minutes : {difference.Seconds:N0} seconds");
                 return;
             }
 
-            VoteCooldown[steamid] = DateTime.Now.AddSeconds(_command.TriggerCount);
+            VoteCooldown[steamid] = DateTime.UtcNow.AddSeconds(_command.TriggerCount);
         }
         else
-            VoteCooldown.Add(steamid, DateTime.Now.AddSeconds(_command.TriggerCount));
+            VoteCooldown.Add(steamid, DateTime.UtcNow.AddSeconds(_command.TriggerCount));
 
-        var voteDuration = TimeSpan.Parse(_command.Interval);
+        var voteDuration = _command.IntervalSpan;
         // voting status
         _voteInProgress = name;
         VoteStatus = Status.VoteInProgress;
@@ -130,7 +135,7 @@ public sealed class VotingActions(ICommandContext context) : CommandActions(cont
 
     public void VoteList()
     {
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new();
         var voteCommands = new List<AutoCommand>(EssentialsCore.Config.AutoCommands.Where(x=>x.CommandTrigger == Trigger.Vote));
         if (Context.Player == null)sb.AppendLine($"Found {voteCommands.Count}");
         var c = 1;
@@ -176,24 +181,7 @@ public sealed class VotingActions(ICommandContext context) : CommandActions(cont
         }
 
         var steamid = Context.Player.SteamUserId;
-        if (VoteReg.TryGetValue(steamid, out DateTime lastcommand))
-        {
-            TimeSpan difference = DateTime.Now - lastcommand;
-            TimeSpan voteDuration = TimeSpan.Parse(_command.Interval);
-            if (difference.TotalSeconds < voteDuration.TotalSeconds)
-            {
-                Context.Respond("Your vote has already been submitted.");
-                return;
-            }
-
-            VoteReg[steamid] = DateTime.Now;
-        }
-        else
-        {
-            VoteReg.Add(steamid, DateTime.Now);
-        }
-
-        Context.Respond("Your vote has been submitted.");
+        Context.Respond(VoteReg.Add(steamid) ? "Your vote has been submitted." : "Your vote has already been submitted.");
     }
 
     public void VoteDebug()

@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 using Sandbox.Engine.Multiplayer;
 using Sandbox.Game.Entities;
 using Sandbox.Game.World;
@@ -150,18 +149,13 @@ public sealed class PlayerActions(ICommandContext context) : CommandActions(cont
             return;
         }
 
-        // Skip the player name in the raw text, which may be quoted.
-        var raw = Context.RawArgs.TrimStart();
-        int nameEnd = raw.StartsWith("\"")
-            ? raw.IndexOf('"', 1)
-            : raw.IndexOf(' ');
-        if (nameEnd < 0 || nameEnd + 1 >= raw.Length)
+        var message = string.Join(" ", Context.Args.Skip(1));
+        if (string.IsNullOrWhiteSpace(message))
         {
             Context.Respond("Usage: !w <player> <message>");
             return;
         }
 
-        var message = raw.Substring(nameEnd + 1).Trim();
         var player = Utilities.GetPlayerByNameOrId(playerName);
 
         if (player == null)
@@ -178,6 +172,9 @@ public sealed class PlayerActions(ICommandContext context) : CommandActions(cont
         IMyPlayer? player = Utilities.GetPlayerByNameOrId(playerName);
         if (player != null)
         {
+            if (!CanActOn(player.SteamUserId))
+                return;
+
             MyMultiplayer.Static.KickClient(player.SteamUserId);
             Context.Respond($"Player '{player.DisplayName}' kicked.");
         }
@@ -196,6 +193,9 @@ public sealed class PlayerActions(ICommandContext context) : CommandActions(cont
             var id = MySession.Static.Players.TryGetSteamId(identity.IdentityId);
             if (id != 0 && (identity.DisplayName == nameOrSteamId || id == steamId))
             {
+                if (!CanActOn(id))
+                    return;
+
                 MyMultiplayer.Static.BanClient(id, true);
                 Context.Respond($"Player {identity.DisplayName} banned. ({id})");
                 return;
@@ -204,6 +204,9 @@ public sealed class PlayerActions(ICommandContext context) : CommandActions(cont
 
         if (isId)
         {
+            if (!CanActOn(steamId))
+                return;
+
             MyMultiplayer.Static.BanClient(steamId, true);
             Context.Respond($"Steam ID {steamId} banned.");
             return;

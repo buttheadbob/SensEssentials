@@ -13,7 +13,7 @@ public class WorldModule : EssentialsModule
     private WorldActions Actions => new(Call);
 
     [Command("identity clean", "Resets identities that have not logged in for X days to a brand-new state (grids, faction, GPS, reputation, credits). The identities are kept. Usage: identity clean <days> [includeNpcs]")]
-    [Permission(MyPromoteLevel.SpaceMaster)]
+    [Permission(MyPromoteLevel.Admin)]
     public void CleanIdentities(int days, bool includeNpcs = false) => Actions.CleanIdentities(days, includeNpcs);
 
     [Command("identity purge", "Removes identities that have not logged in for X days, together with everything they own (grids, faction membership, GPS, reputation, credits). Usage: identity purge <days> [includeNpcs]")]
@@ -38,7 +38,7 @@ public class WorldModule : EssentialsModule
     [Permission(MyPromoteLevel.Admin)]
     public void FactionInfo() => Actions.FactionInfo();
 
-    [Command("sandbox clean", "Cleans up junk data from the sandbox file")]
-    [Permission(MyPromoteLevel.SpaceMaster)]
+    [Command("sandbox clean", "Removes offline identities that own no blocks and other junk data. Deleted asteroids generate again.")]
+    [Permission(MyPromoteLevel.Admin)]
     public void CleanSandbox() => Actions.CleanSandbox();
 }

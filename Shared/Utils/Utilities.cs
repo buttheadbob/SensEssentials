@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Sandbox.Game.Entities;
+using Sandbox.Game.Entities.Cube;
+using Sandbox.Game.EntityComponents;
 using Sandbox.Game.World;
 using Sandbox.ModAPI;
 using VRage.Game.ModAPI;
@@ -31,84 +33,13 @@ public static class Utilities
         return string.Equals(NormalizeTypeName(typeId.ToString()), NormalizeTypeName(typeName), StringComparison.OrdinalIgnoreCase);
     }
 
-    public static bool HasBlockType(this IMyCubeGrid grid, string typeName)
+    /// <summary>
+    /// Any block that produces electricity, so modded and newer power blocks are included.
+    /// </summary>
+    public static bool ProducesPower(MyFunctionalBlock block)
     {
-        foreach (var block in ((MyCubeGrid)grid).GetFatBlocks())
-            if (IsBlockType(block.BlockDefinition.Id.TypeId, typeName))
-                return true;
-
-        return false;
-    }
-
-    public static bool HasBlockSubtype(this IMyCubeGrid grid, string subtypeName)
-    {
-        foreach (var block in ((MyCubeGrid)grid).GetFatBlocks())
-            if (string.Compare(block.BlockDefinition.Id.SubtypeName, subtypeName, StringComparison.InvariantCultureIgnoreCase) == 0)
-                return true;
-
-        return false;
-    }
-        
-    public static bool HasBlockTypeFast(this IMyCubeGrid grid, string typeName)
-    {
-        var types = typeName.Split([","], StringSplitOptions.RemoveEmptyEntries);
-        var list = new List<MyObjectBuilderType>();
-
-        foreach (var s in types)
-        {
-            // TryParse only knows the full "MyObjectBuilder_" name, while hastype accepts both forms.
-            if (MyObjectBuilderType.TryParse(TypePrefix + NormalizeTypeName(s), out var typeId))
-            {
-                list.Add(typeId);
-            }
-        }
-
-        if (list.Count == 0)
-        {
-            return false;
-        }
-            
-        foreach (var block in ((MyCubeGrid) grid).GetFatBlocks())
-        {
-            for (var i = 0; i < list.Count; i++)
-            {
-                if (block.BlockDefinition.Id.TypeId == list[i])
-                {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    public static bool HasBlockSubtypeFast(this IMyCubeGrid grid, string subtypeName)
-    {
-        var subtypes = subtypeName.Split([","], StringSplitOptions.RemoveEmptyEntries);
-        var list = new List<MyStringHash>();
-
-        foreach (var s in subtypes)
-        {
-            // TryGet returns NullOrEmpty for an unknown subtype, which would match every block without a subtype.
-            var hash = MyStringHash.TryGet(s.Trim());
-            if (hash != MyStringHash.NullOrEmpty)
-                list.Add(hash);
-        }
-
-        if (list.Count == 0)
-            return false;
-
-        foreach (var block in ((MyCubeGrid) grid).GetFatBlocks())
-        {
-            for (var i = 0; i < list.Count; i++)
-            {
-                if (block.BlockDefinition.Id.SubtypeId == list[i])
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        var source = block.Components.Get<MyResourceSourceComponent>();
+        return source != null && source.ResourceTypes.Contains(MyResourceDistributorComponent.ElectricityId);
     }
 
     /// <summary>
@@ -152,7 +83,7 @@ public static class Utilities
                 if (identity.IdentityId == identityId)
                     return identity;
 
-            if (ulong.TryParse(playerNameOrIds, out ulong steamId)) 
+            if (ulong.TryParse(playerNameOrIds, out ulong steamId) && steamId != 0)
             {
                 ulong id = GetSteamId(identity.IdentityId);
                 if (id == steamId)
@@ -207,11 +138,5 @@ public static class Utilities
         var result = new List<MyPlayer>(MySession.Static.Players.GetOnlinePlayers()
             .Where(x => x.IsRealPlayer && !string.IsNullOrEmpty(x.DisplayName)));
         return result;
-    }
-
-    public static string FormatDataSize(double size)
-    {
-        string p = MyUtils.FormatByteSizePrefix(ref size);
-        return $"{size:N}{p}B";
     }
 }

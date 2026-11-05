@@ -8,16 +8,16 @@ using System.Windows.Data;
 namespace SensEssentials.TorchHost;
 
 /// <summary>
-/// Rejects text that is not a valid HH:MM:SS time, so the field shows an error instead of silently keeping
+/// Rejects text that is not a valid time, so the field shows an error instead of silently keeping
 /// the old value.
 /// </summary>
 public class TimeSpanValidationRule : ValidationRule
 {
     public override ValidationResult Validate(object value, CultureInfo cultureInfo)
     {
-        return TimeSpan.TryParse(value as string, CultureInfo.InvariantCulture, out var span) && span >= TimeSpan.Zero
+        return TimeFormat.TryParse(value as string, out _)
             ? ValidationResult.ValidResult
-            : new ValidationResult(false, "Enter a time as HH:MM:SS, for example 00:05:00.");
+            : new ValidationResult(false, TimeFormat.Help);
     }
 }
 
@@ -72,7 +72,7 @@ public class TriggerDescriptionConverter : IValueConverter
         return value switch
         {
             Trigger.Disabled => "This command never runs on its own. You can still run it with !admin runauto <name>.",
-            Trigger.Timed => "Runs the steps over and over, waiting the Repeat Every time between runs.",
+            Trigger.Timed => "Waits the Repeat Every time, runs the steps, and starts over.",
             Trigger.Scheduled => "Runs the steps once a day at the Time Of Day (server time), on the chosen day or every day.",
             Trigger.OnStart => "Runs the steps once, shortly after the server has finished starting.",
             Trigger.GridCount => "Checks the number of grids every Check Every interval and runs the steps when the comparison is true. It will not start again while a previous run is still going.",

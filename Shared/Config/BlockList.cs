@@ -2,7 +2,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -30,7 +29,7 @@ public class BlockList : ObservableObject
     public string GetCommand(string action, BlockListItem item)
     {
         var sb = new StringBuilder();
-        sb.Append($"!blocks {action} {item.Selector.ToString().ToLower()} {Quote(item.Value)}");
+        sb.Append($"!blocks {action} {item.Selector.ToString().ToLowerInvariant()} {Quote(item.Value)}");
         foreach (var condition in Conditions)
         {
             sb.Append($" {condition.Condition.ToCommandString()}");
@@ -40,13 +39,16 @@ public class BlockList : ObservableObject
         return sb.ToString();
     }
 
-    private static string Quote(string value) => value.Contains(' ') ? $"\"{value}\"" : value;
+    private static string Quote(string value) => EssentialsCore.Host.QuoteArgument(value);
 
     protected override void OnPropertyChanged([CallerMemberName] string propName = "")
     {
         base.OnPropertyChanged(propName);
-        if (propName != nameof(Problem))
-            base.OnPropertyChanged(nameof(Problem));
+        if (propName is nameof(Problem) or nameof(Warning) or nameof(Attention))
+            return;
+        base.OnPropertyChanged(nameof(Problem));
+        base.OnPropertyChanged(nameof(Warning));
+        base.OnPropertyChanged(nameof(Attention));
     }
 
     /// <summary>
@@ -70,6 +72,18 @@ public class BlockList : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Worth a second look, but it still runs.
+    /// </summary>
+    public string? Warning => Conditions.Any(c => ConditionNotes.IsOwnedByNobody(c.Condition.ToCommandString(), c.Parameter))
+        ? ConditionNotes.OwnedByNobody
+        : null;
+
+    /// <summary>
+    /// What the list marker shows: a problem first, then a warning.
+    /// </summary>
+    public string? Attention => Problem ?? Warning;
+
     private void WatchSubCollection<T>(ObservableCollection<T> collection) where T : ObservableObject
     {
         collection.CollectionChanged += (_, e) =>
@@ -82,9 +96,6 @@ public class BlockList : ObservableObject
                     item.PropertyChanged -= SubItemChanged;
             OnPropertyChanged();
         };
-
-        foreach (var item in collection)
-            item.PropertyChanged += SubItemChanged;
     }
 
     private void SubItemChanged(object? sender, PropertyChangedEventArgs e) => OnPropertyChanged();
@@ -100,11 +111,13 @@ public class BlockListItem : ObservableObject
 
     public string Delay
     {
-        get => DelaySpan.ToString();
+        get => TimeFormat.Format(DelaySpan);
         set
         {
-            if (TimeSpan.TryParse(value, CultureInfo.InvariantCulture, out var span))
+            if (TimeFormat.TryParse(value, out var span))
                 SetValue(ref DelaySpan, span);
+            else
+                Log.Warn($"Block preset item '{Value}' has an unreadable delay '{value}'. {TimeFormat.Help}");
         }
     }
 

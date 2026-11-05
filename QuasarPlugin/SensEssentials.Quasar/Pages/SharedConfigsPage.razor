@@ -3,7 +3,6 @@
 @implements IDisposable
 @inject SharedConfigStore Store
 @inject SharedConfigSync Sync
-@inject IJSRuntime JS
 
 <PageTitle>Sens Essentials</PageTitle>
 <NavigationLock OnBeforeInternalNavigation="ConfirmLeaveAsync" ConfirmExternalNavigation="@IsDirty" />
@@ -101,7 +100,7 @@
 
         @if (_config == null || _draft == null)
         {
-            <ServersPanel />
+            <ServersPanel Assigned="OnAssigned" />
         }
         else
         {
@@ -123,7 +122,7 @@
 
             @if (_draft.FirstProblem() is { } problem)
             {
-                <div class="quasar-notice">⚠ @problem Items marked ⚠ can be saved, but Sens Essentials refuses to run them until fixed.</div>
+                <div class="quasar-notice">⚠ @problem Items marked ⚠ can be saved, but some will not run until fixed.</div>
             }
 
             <div class="quasar-segmented se-tabs" role="tablist" aria-label="Config sections">
@@ -139,7 +138,7 @@
                     @switch (_tab)
                     {
                         case "Servers":
-                            <ServersPanel Highlight="_config" />
+                            <ServersPanel Highlight="_config" Assigned="OnAssigned" />
                             break;
                         case "General":
                             <GeneralTab Values="_draft" />
@@ -186,7 +185,12 @@
     </div>
 </div>
 
+<ServerToasts @ref="_toasts" />
+<ConfirmBox @ref="_confirm" />
+
 @code {
+    private ServerToasts? _toasts;
+    private ConfirmBox? _confirm;
     private static readonly string[] Tabs =
         ["Servers", "General", "MOTD", "Auto Commands", "Sim Speed", "Info Commands", "Block Presets", "Cleanup Presets", "Discord Logging", "Admin Tools", "Instructions"];
 
@@ -241,11 +245,17 @@
             else if (current.Revision != _config.Revision)
             {
                 var dirty = IsDirty;
+                var valuesChanged = current.Values.ToJson() != _savedJson;
                 _config = current;
                 if (!dirty)
+                {
                     Load(current);
-                else
+                }
+                else if (valuesChanged)
+                {
+                    _savedJson = current.Values.ToJson();
                     _error = "This config was changed elsewhere. Saving replaces those changes.";
+                }
             }
         }
         StateHasChanged();
@@ -259,7 +269,7 @@
     }
 
     private async Task<bool> ConfirmDiscardAsync() =>
-        !IsDirty || await JS.InvokeAsync<bool>("confirm", "Discard the unsaved changes?");
+        !IsDirty || await _confirm!.AskAsync("Discard the unsaved changes?", "Discard");
 
     private async Task ConfirmLeaveAsync(LocationChangingContext context)
     {
@@ -318,10 +328,11 @@
             return;
         _busy = true;
         _error = null;
+        var name = _newName;
         try
         {
             var values = await Sync.ExportAsync(_importServerId, CancellationToken.None);
-            var created = Store.Create(_newName, values);
+            var created = Store.Create(name, values);
             _newName = "";
             _importServerId = "";
             _showImport = false;
@@ -357,10 +368,11 @@
         var question = count == 0
             ? $"Delete \"{config.Name}\"?"
             : $"Delete \"{config.Name}\"? Its {count} server(s) go back to being configured on their own and keep their settings.";
-        if (!await JS.InvokeAsync<bool>("confirm", question))
+        if (!await _confirm!.AskAsync(question, "Delete"))
             return;
         if (!TryStore(() => Store.Delete(config.Id)))
             return;
+        _error = null;
         if (_config?.Id == config.Id)
         {
             _config = null;
@@ -376,24 +388,31 @@
         var dirty = IsDirty;
         if (!TryStore(() => Store.Rename(_config.Id, name)))
             return;
-        var renamed = Store.GetConfig(_config.Id)!;
+        if (Store.GetConfig(_config.Id) is not { } renamed)
+            return;
         _config = renamed;
         if (!dirty)
             Load(renamed);
         _session.Say($"Renamed to \"{name}\".");
     }
 
+    private void OnAssigned(ServerState server, SharedConfig? config) => _toasts?.Track(server.ServerId, server.DisplayName, config);
+
     private void Save()
     {
         if (_config == null || _draft == null)
             return;
-        _busy = true;
         try
         {
-            var saved = Store.Save(_config.Id, _draft);
+            var saved = Store.Save(_config.Id, _draft, _config.Revision);
             _error = null;
-            Load(saved);
-            var count = Store.GetAssignments().Values.Count(a => a.ConfigId == saved.Id);
+            // Keeps the draft, so the tab you are on keeps its selection.
+            _config = saved;
+            _savedJson = _draft.ToJson();
+            var followers = Store.GetAssignments().Where(a => a.Value.ConfigId == saved.Id).ToList();
+            var count = followers.Count;
+            foreach (var (serverId, assignment) in followers)
+                _toasts?.Track(serverId, assignment.DisplayName, saved);
             _session.Say(count == 0
                 ? $"Saved revision {saved.Revision}. No server follows this config yet; choose them on the Servers tab."
                 : $"Saved revision {saved.Revision}. Sending it to {count} server(s).");
@@ -401,10 +420,6 @@
         catch (Exception e)
         {
             _error = "Could not save: " + e.Message;
-        }
-        finally
-        {
-            _busy = false;
         }
     }
 

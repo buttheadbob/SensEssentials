@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Timers;
 using NLog;
 using Sandbox.Game.World;
 using SensEssentials.Commands;
@@ -78,7 +77,7 @@ public class AdminModule : EssentialsModule
     [Permission(MyPromoteLevel.Admin)]
     public void Refill(string player, int minutes = 30) => Actions.Refill(player, minutes);
 
-    [Command("give", "Insert an item with a specific quanity into a players inventory")]
+    [Command("give", "Insert an item with a specific quantity into a players inventory")]
     [Permission(MyPromoteLevel.Admin)]
     public void Give(string playerName, string itemType, string item, int quantity) => Actions.Give(playerName, itemType, item, quantity);
 
@@ -87,7 +86,7 @@ public class AdminModule : EssentialsModule
     // Command modules are created per command, so mute state must be static.
     private static readonly Dictionary<ulong, DateTime> _muted = [];
     private static readonly object _muteLock = new();
-    private static Timer? _muteTimer;
+    private static DateTime _nextMuteCheck;
     private static IChatManagerServer? ChatManager => EssentialsPlugin.Instance.Torch.CurrentSession?.Managers?.GetManager<IChatManagerServer>();
 
     [Command("mute", "Mutes a user in global chat for the given number of minutes.")]
@@ -100,70 +99,53 @@ public class AdminModule : EssentialsModule
             return;
         }
 
+        if (!Actions.CanActOn(p.SteamUserId))
+            return;
+
         bool res = ChatManager?.MuteUser(p.SteamUserId) ?? false;
 
         if (!res)
+        {
             Context.Respond($"Failed to mute user {user}. They are already muted.");
-        else
-            Context.Respond(timeout > 0 ? $"Muted user {p.DisplayName} for {timeout} minute(s)" : $"Muted user {p.DisplayName}");
+            return;
+        }
+
+        Context.Respond(timeout > 0 ? $"Muted user {p.DisplayName} for {timeout} minute(s)" : $"Muted user {p.DisplayName}");
 
         if (timeout > 0)
         {
             lock (_muteLock)
             {
-                _muted[p.SteamUserId] = DateTime.Now + TimeSpan.FromMinutes(timeout);
-                if (_muteTimer == null)
-                {
-                    _muteTimer = new Timer(1000) { AutoReset = true };
-                    _muteTimer.Elapsed += MuteTimerElapsed;
-                    _muteTimer.Start();
-                }
+                _muted[p.SteamUserId] = DateTime.UtcNow + TimeSpan.FromMinutes(timeout);
             }
         }
     }
 
-    private static void MuteTimerElapsed(object sender, ElapsedEventArgs e)
+    /// <summary>
+    /// Every game tick. Once a second, ends the timed mutes that are due.
+    /// </summary>
+    internal static void UpdateMutes()
     {
+        if (DateTime.UtcNow < _nextMuteCheck)
+            return;
+        _nextMuteCheck = DateTime.UtcNow + TimeSpan.FromSeconds(1);
+
         List<ulong> expired;
         lock (_muteLock)
         {
-            expired = _muted.Where(m => m.Value <= DateTime.Now).Select(m => m.Key).ToList();
+            expired = [.. _muted.Where(m => m.Value <= DateTime.UtcNow).Select(m => m.Key)];
             foreach (var id in expired)
                 _muted.Remove(id);
-
-            if (_muted.Count == 0 && _muteTimer != null)
-            {
-                _muteTimer.Dispose();
-                _muteTimer = null;
-            }
         }
 
-        if (expired.Count == 0)
-            return;
-
-        // Chat manager state belongs to the game thread.
-        try
-        {
-            GameThread.InvokeSafe(() =>
-            {
-                foreach (var id in expired)
-                    ChatManager?.UnmuteUser(id);
-            });
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Failed to unmute expired users");
-        }
+        foreach (var id in expired)
+            ChatManager?.UnmuteUser(id);
     }
 
-    internal static void StopMuteTimer()
+    internal static void ClearMutes()
     {
         lock (_muteLock)
-        {
-            _muteTimer?.Dispose();
-            _muteTimer = null;
             _muted.Clear();
-        }
     }
 
     [Command("unmute", "Removes a chat mute from a user, if they have been muted.")]
@@ -185,7 +167,7 @@ public class AdminModule : EssentialsModule
             Context.Respond($"Unmuted user {p.DisplayName}");
     }
 
-    [Command("list mute", "Lists all muted users, an their timeout, if applciable.")]
+    [Command("list mute", "Lists all muted users, an their timeout, if applicable.")]
     public void ListMute()
     {
         var mutedUsers = ChatManager?.MutedUsers.ToList();
@@ -207,7 +189,7 @@ public class AdminModule : EssentialsModule
             lock (_muteLock)
                 f = _muted.TryGetValue(m, out t);
 
-            sb.AppendLine($"{s}: {(f ? (t - DateTime.Now).ToString(@"hh\:mm\:ss") : "inf")}");
+            sb.AppendLine($"{s}: {(f ? (t - DateTime.UtcNow).ToString(@"hh\:mm\:ss") : "inf")}");
         }
 
         if (Context.SentBySelf)

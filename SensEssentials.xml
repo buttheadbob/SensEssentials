@@ -17,21 +17,18 @@
     <Description>
 Sens Essentials is a collection of utilities and administration tools for Space Engineers dedicated servers.
 
-- Auto Commands: run any command on a timer, at a time of day, at startup, on a player vote, or when grid count,
-  player count or sim speed crosses a limit. Each one runs a list of steps with delays.
-- Cleanup Presets: delete grids by name, owner, power, distance from players and many other conditions.
-  Run with !admin runcleanup &lt;name&gt;.
-- Block Presets: turn blocks on or off, or remove them, across the server. Run with !admin runpreset &lt;name&gt;.
-- MOTD for every player and for new players, with an optional Steam overlay link.
-- Info Commands: custom answers players get with !info &lt;name&gt;, as chat, a dialog or a link.
-- Discord Logging: post log entries to Discord webhooks by level and logger, with pings and rate limits.
-- Suit Refill for admins, everyone (lobby worlds), or one player for a while.
-- Commands for grids, entities, teleporting, economy, voting, voxel resets, factions and inactive identities.
+- Auto Commands: run any command on a timer, at a time of day, at startup, on a vote, or at a grid count, player
+  count or sim speed limit.
+- Cleanup and Block Presets: delete grids or switch blocks by conditions.
+- MOTD, and Info Commands players run with !info &lt;name&gt;.
+- Discord Logging: post plugin logs to webhooks. Off by default.
+- Suit Refill, and commands for grids, entities, teleporting, economy, voting, voxels, factions and identities.
 
-Configure it in Quasar under Server plugins. New Discord handlers start disabled, with both levels at Trace.
-The full guide is in the README on GitHub: https://github.com/buttheadbob/SensEssentials
+On by default, under General: each player keeps 1 backpack, so older ones are deleted even with items in them
+(Backpack limit).
 
-Also available as a Torch plugin, both builds share the same code.
+Configure it in Quasar under Server plugins. Guide: https://github.com/buttheadbob/SensEssentials
+Also available as a Torch plugin.
     </Description>
 
     <SourceDirectories>
@@ -40,6 +37,5 @@ Also available as a Torch plugin, both builds share the same code.
         <Directory>Versioning</Directory>
     </SourceDirectories>
 
-    <!-- TODO: the commit hash of the version to publish -->
-    <Commit>TODO Git commit hash</Commit>
+    <Commit>35e47c8bf941b874a7ad0ff441814e9699dbec25</Commit>
 </PluginData>

@@ -32,11 +32,11 @@ public static class SuitRefill
                 : $"{playerName} has no timed refill.";
         }
 
-        var until = DateTime.Now + TimeSpan.FromMinutes(minutes);
+        var until = DateTime.UtcNow + TimeSpan.FromMinutes(minutes);
         Timed[steamId] = until;
         _nextRun = DateTime.MinValue;
 
-        var text = $"Refilling {playerName} until {until:HH:mm} ({minutes} minute{(minutes == 1 ? "" : "s")}).";
+        var text = $"Refilling {playerName} until {until.ToLocalTime():HH:mm} ({minutes} minute{(minutes == 1 ? "" : "s")}).";
         if (!EssentialsCore.Config.SuitRefillEnabled)
             text += " Suit Refill is turned off on the Admin Tools tab, so nothing happens until it is turned on.";
         return text;
@@ -46,7 +46,7 @@ public static class SuitRefill
 
     public static void Update()
     {
-        var now = DateTime.Now;
+        var now = DateTime.UtcNow;
         if (now < _nextRun)
             return;
         _nextRun = now + Interval;
@@ -54,7 +54,7 @@ public static class SuitRefill
         foreach (var expired in Timed.Where(t => t.Value <= now).Select(t => t.Key).ToList())
             Timed.Remove(expired);
 
-        var config = EssentialsCore.Host?.Config;
+        var config = EssentialsCore.HostOrNull?.Config;
         if (config == null || !config.SuitRefillEnabled || MySession.Static?.Ready != true)
             return;
 

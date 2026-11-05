@@ -10,11 +10,6 @@
              mc:Ignorable="d">
 
     <UserControl.Resources>
-        <ObjectDataProvider x:Key="TriggerValues" MethodName="GetValues" ObjectType="{x:Type sys:Enum}">
-            <ObjectDataProvider.MethodParameters>
-                <x:Type TypeName="model:Trigger"/>
-            </ObjectDataProvider.MethodParameters>
-        </ObjectDataProvider>
         <ObjectDataProvider x:Key="GtlValues" MethodName="GetValues" ObjectType="{x:Type sys:Enum}">
             <ObjectDataProvider.MethodParameters>
                 <x:Type TypeName="model:Gtl"/>
@@ -45,19 +40,14 @@
                 <x:Type TypeName="model:CleanupAction"/>
             </ObjectDataProvider.MethodParameters>
         </ObjectDataProvider>
-        <ObjectDataProvider x:Key="CleanupConditionTypeValues" MethodName="GetValues" ObjectType="{x:Type sys:Enum}">
-            <ObjectDataProvider.MethodParameters>
-                <x:Type TypeName="model:CleanupConditionType"/>
-            </ObjectDataProvider.MethodParameters>
-        </ObjectDataProvider>
         <ObjectDataProvider x:Key="RuleAccessValues" MethodName="GetValues" ObjectType="{x:Type sys:Enum}">
             <ObjectDataProvider.MethodParameters>
                 <x:Type TypeName="model:RuleAccess"/>
             </ObjectDataProvider.MethodParameters>
         </ObjectDataProvider>
-        <ObjectDataProvider x:Key="DiscordLogLevelValues" MethodName="GetValues" ObjectType="{x:Type sys:Enum}">
+        <ObjectDataProvider x:Key="EssentialsLogLevelValues" MethodName="GetValues" ObjectType="{x:Type sys:Enum}">
             <ObjectDataProvider.MethodParameters>
-                <x:Type TypeName="model:DiscordLogLevel"/>
+                <x:Type TypeName="model:EssentialsLogLevel"/>
             </ObjectDataProvider.MethodParameters>
         </ObjectDataProvider>
 
@@ -179,7 +169,6 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Stop entities on start" ToolTip="Stop all entities in the world when the server starts." Margin="5" VerticalAlignment="Center"/>
@@ -191,11 +180,9 @@
                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Grid list GPS marker" ToolTip="Show users the position of all grids they own by GPS marker." Margin="5" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Row="2" Grid.Column="1" IsChecked="{Binding MarkerShowPosition}" Margin="5" VerticalAlignment="Center"/>
 
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Backpack limit" ToolTip="Number of backpacks per player. Empty backpacks deleted after 30s. Set -1 for no limit." Margin="5" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Backpack limit" ToolTip="Number of backpacks per player, counted separately for each player. Empty backpacks and the oldest over the limit, even with items in them, are deleted after 30s. Set -1 for no limit." Margin="5" VerticalAlignment="Center"/>
                                 <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding BackpackLimit, UpdateSourceTrigger=PropertyChanged}" Width="80" HorizontalAlignment="Left" Margin="5"/>
 
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Cut game tags" ToolTip="Cuts mods and block limits from matchmaking server info. Prevents 'error downloading session settings'." Margin="5" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Row="4" Grid.Column="1" IsChecked="{Binding CutGameTags}" Margin="5" VerticalAlignment="Center"/>
                             </Grid>
                         </GroupBox>
                     </StackPanel>
@@ -355,8 +342,16 @@
                             <Button Content="- Remove" Click="RemoveAutoCommand_OnClick" Margin="5" Padding="10,3"/>
                         </StackPanel>
                         <ListBox x:Name="AutoCommandsList"
-                                 ItemsSource="{Binding AutoView, ElementName=Root}"
-                                 DisplayMemberPath="Name"/>
+                                 ItemsSource="{Binding AutoView, ElementName=Root}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" ToolTip="{Binding Problem}">
+                                        <TextBlock Style="{StaticResource WarningIcon}" Tag="{Binding Problem}"/>
+                                        <TextBlock Text="{Binding Name}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
                     </DockPanel>
 
                     <!-- Right: Detail -->
@@ -365,6 +360,9 @@
                     <ScrollViewer Grid.Column="1" Style="{StaticResource DetailPanel}"
                                   DataContext="{Binding SelectedItem, ElementName=AutoCommandsList}">
                         <StackPanel>
+                            <Border Style="{StaticResource WarningBanner}" Tag="{Binding Problem}">
+                                <TextBlock TextWrapping="Wrap" Text="{Binding Problem, StringFormat='This command will not run: {0}'}"/>
+                            </Border>
                             <GroupBox Header="Command Settings">
                                 <!-- Each row is only shown for the triggers that use it. -->
                                 <StackPanel>
@@ -545,8 +543,8 @@
                                  ItemsSource="{Binding BlockLists}">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" ToolTip="{Binding Problem}">
-                                        <TextBlock Style="{StaticResource WarningIcon}" Tag="{Binding Problem}"/>
+                                    <StackPanel Orientation="Horizontal" ToolTip="{Binding Attention}">
+                                        <TextBlock Style="{StaticResource WarningIcon}" Tag="{Binding Attention}"/>
                                         <TextBlock Text="{Binding Name}"/>
                                     </StackPanel>
                                 </DataTemplate>
@@ -562,6 +560,9 @@
                         <StackPanel>
                             <Border Style="{StaticResource WarningBanner}" Tag="{Binding Problem}">
                                 <TextBlock TextWrapping="Wrap" Text="{Binding Problem, StringFormat='This preset will not run: {0}'}"/>
+                            </Border>
+                            <Border Style="{StaticResource WarningBanner}" Tag="{Binding Warning}">
+                                <TextBlock TextWrapping="Wrap" Text="{Binding Warning}"/>
                             </Border>
                             <GroupBox Header="Preset Settings">
                                 <Grid>
@@ -666,8 +667,8 @@
                                  ItemsSource="{Binding CleanupPresets}">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" ToolTip="{Binding Problem}">
-                                        <TextBlock Style="{StaticResource WarningIcon}" Tag="{Binding Problem}"/>
+                                    <StackPanel Orientation="Horizontal" ToolTip="{Binding Attention}">
+                                        <TextBlock Style="{StaticResource WarningIcon}" Tag="{Binding Attention}"/>
                                         <TextBlock Text="{Binding Name}"/>
                                     </StackPanel>
                                 </DataTemplate>
@@ -683,6 +684,9 @@
                         <StackPanel>
                             <Border Style="{StaticResource WarningBanner}" Tag="{Binding Problem}">
                                 <TextBlock TextWrapping="Wrap" Text="{Binding Problem, StringFormat='This preset will not run: {0}'}"/>
+                            </Border>
+                            <Border Style="{StaticResource WarningBanner}" Tag="{Binding Warning}">
+                                <TextBlock TextWrapping="Wrap" Text="{Binding Warning}"/>
                             </Border>
                             <GroupBox Header="Preset Settings">
                                 <Grid>
@@ -732,7 +736,7 @@
                                             <DataGridTemplateColumn Header="Condition" Width="200">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
-                                                        <ComboBox ItemsSource="{Binding Source={StaticResource CleanupConditionTypeValues}}"
+                                                        <ComboBox ItemsSource="{Binding Source={StaticResource ConditionTypeValues}}"
                                                                   SelectedItem="{Binding Condition, UpdateSourceTrigger=PropertyChanged}"/>
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
@@ -760,7 +764,7 @@
                                             <DataGridTemplateColumn Header="Condition" Width="200">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
-                                                        <ComboBox ItemsSource="{Binding Source={StaticResource CleanupConditionTypeValues}}"
+                                                        <ComboBox ItemsSource="{Binding Source={StaticResource ConditionTypeValues}}"
                                                                   SelectedItem="{Binding Condition, UpdateSourceTrigger=PropertyChanged}"/>
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
@@ -926,7 +930,7 @@
                                 Posts server log entries to Discord channels through webhooks. Each handler below picks entries by level and logger name and posts them to one channel.
                             </TextBlock>
                             <StackPanel Orientation="Horizontal" Margin="20,6,0,0">
-                                <TextBlock Text="Entries per second per webhook" VerticalAlignment="Center" ToolTip="Entries over this limit are dropped, and the channel is told how many. Discord allows about 5."/>
+                                <TextBlock Text="Entries per second per webhook" VerticalAlignment="Center" ToolTip="Entries over this limit are dropped, and the channel is told how many. Discord sets the real limit, and the plugin waits when told to."/>
                                 <TextBox Text="{Binding DiscordRateLimitPerSecond, UpdateSourceTrigger=LostFocus}" Width="40" Margin="5,0,20,0"/>
                                 <TextBlock Text="Attach stack traces longer than" VerticalAlignment="Center" ToolTip="Longer stack traces are sent as a text file instead of shown in the message. Maximum 2500 characters."/>
                                 <TextBox Text="{Binding DiscordStackTraceEmbedLimit, UpdateSourceTrigger=LostFocus}" Width="60" Margin="5,0,5,0"/>
@@ -1012,10 +1016,10 @@
                                         <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding WebhookUrl, UpdateSourceTrigger=LostFocus}" Margin="5"/>
 
                                         <TextBlock Grid.Row="3" Grid.Column="0" Text="Min level" ToolTip="Entries below this level are not sent." Margin="5" VerticalAlignment="Center"/>
-                                        <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding Source={StaticResource DiscordLogLevelValues}}" SelectedItem="{Binding MinLevel}" Width="120" HorizontalAlignment="Left" Margin="5"/>
+                                        <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding Source={StaticResource EssentialsLogLevelValues}}" SelectedItem="{Binding MinLevel}" Width="120" HorizontalAlignment="Left" Margin="5"/>
 
                                         <TextBlock Grid.Row="4" Grid.Column="0" Text="Max level" ToolTip="Entries above this level are not sent." Margin="5" VerticalAlignment="Center"/>
-                                        <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding Source={StaticResource DiscordLogLevelValues}}" SelectedItem="{Binding MaxLevel}" Width="120" HorizontalAlignment="Left" Margin="5"/>
+                                        <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding Source={StaticResource EssentialsLogLevelValues}}" SelectedItem="{Binding MaxLevel}" Width="120" HorizontalAlignment="Left" Margin="5"/>
 
                                         <TextBlock Grid.Row="5" Grid.Column="0" Text="Only while online" ToolTip="Only send while a world is loaded, so startup and shutdown entries are skipped." Margin="5" VerticalAlignment="Center"/>
                                         <CheckBox Grid.Row="5" Grid.Column="1" IsChecked="{Binding OnlyWhenServerOnline}" Margin="5" VerticalAlignment="Center"/>
@@ -1151,7 +1155,7 @@
                                     </TextBlock>
                                     <TextBlock TextWrapping="Wrap" FontWeight="Bold" Margin="0,10,0,4">Status bar and Undo:</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">The bar at the bottom of the window confirms what you just did. After removing anything (a preset, a step, a player, a rule...), click Undo there to put it back exactly where it was.</TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Time fields use HH:MM:SS. If a value cannot be read, the field turns red and the old value is kept; hover the field to see why.</TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Time fields use HH:MM:SS, or D:HH:MM:SS with days in front: 1:00:00:00 and 24:00:00 are both one day. The smallest step is 1 second. If a value cannot be read, the field turns red and the old value is kept; hover the field to see why.</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">A ⚠ next to a preset or player means something needs attention. Select it to see what.</TextBlock>
                                 </StackPanel>
                             </TabItem>
@@ -1177,11 +1181,10 @@
                                 <StackPanel Margin="15">
                                     <TextBlock FontSize="16" FontWeight="Bold" Text="General Settings" Margin="0,0,0,10"/>
                                     <TextBlock TextWrapping="Wrap" FontWeight="Bold" Margin="0,10,0,4">Options:</TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Stop entities on start - Freezes all ships and stations when the server starts up. Helps prevent damage from physics glitches during loading.</TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Stop entities on start - Stops every moving ship and other entity once, when the server starts up. Helps prevent damage from physics glitches during loading.</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Grid list show position - Shows players the coordinates of their grids when they use the grid list command.</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Grid list GPS marker - Creates GPS markers for each grid a player owns, making them easy to find.</TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Backpack limit - Controls how many backpacks (dropped inventories) each player can have. Set to -1 for unlimited. Empty backpacks are automatically cleaned up after 30 seconds.</TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Cut game tags - Removes mod and block limit information from the server listing. Enable this if players get "error downloading session settings" when trying to join.</TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Backpack limit - Controls how many backpacks (dropped inventories) each player can have. Set to -1 for unlimited. Empty backpacks and the oldest over the limit, even with items in them, are deleted after 30 seconds.</TextBlock>
                                 </StackPanel>
                             </TabItem>
 
@@ -1198,7 +1201,7 @@
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">4. Add steps - each step is a command that runs in order. The Delay is how long to wait after that step before running the next one.</TextBlock>
                                     <TextBlock TextWrapping="Wrap" FontWeight="Bold" Margin="0,10,0,4">Triggers:</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Disabled - Never runs on its own. Can still be run with !admin runauto &lt;name&gt;.</TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Timed - Runs the steps, then waits Repeat Every before running them again.</TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Timed - Waits Repeat Every, runs the steps, and starts over. The first wait starts when the setting is loaded or changed.</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Scheduled - Runs once a day at Time Of Day (server time), on the chosen day or every day.</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">OnStart - Runs once, shortly after the server has finished starting.</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">GridCount / PlayerCount - Every Check Every interval, compares the number of grids (or online players) to Count, and runs the steps when it matches. A new run does not start while the previous run of the same command is still going.</TextBlock>
@@ -1210,7 +1213,7 @@
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Name: "Restart Warning", Trigger: Timed, Interval: 04:00:00</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Step 1: !say Server restarting in 5 minutes (Delay: 00:04:00)</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Step 2: !say Server restarting in 1 minute (Delay: 00:01:00)</TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Step 3: !stop (Delay: 00:00:00)</TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Step 3: !restart (Delay: 00:00:00)</TextBlock>
                                 </StackPanel>
                             </TabItem>
 
@@ -1345,10 +1348,15 @@
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">A ship and everything attached to it by rotors, hinges and pistons is checked and deleted together:</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="20,0,0,3">Name and grid type are checked on the main (largest) grid.</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="20,0,0,3">Block and PCU counts are totals for the whole ship.</TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="20,0,0,3">Owner type uses whoever owns the most blocks on the whole ship; owned by nobody means no block on the whole ship is owned.</TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="20,0,0,3">HasOwnerType uses whoever owns the most blocks on the whole ship. OwnedBy looks at every block on it.</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="20,0,0,3">"Has" conditions (has type, has power, ...) match when any part of the ship has it; "no" conditions (no type, no power, ...) match only when no part has it.</TextBlock>
+                                    <TextBlock TextWrapping="Wrap" FontWeight="Bold" Margin="0,10,0,4">OwnedBy and HasOwnerType are different:</TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">OwnedBy asks: does ANY block belong to this owner? One NPC block on a player's ship is enough for OwnedBy npc.</TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">HasOwnerType asks: who is the MAJORITY owner? Use it to judge a whole ship.</TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Both take npc, nobody, player or pirates, in upper or lower case. OwnedBy also takes a player name or IdentityId.</TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,8">OwnedBy nobody is the one exception: it means no block has an owner at all. A preset using it shows a ⚠ warning, because deleting is permanent. HasOwnerType nobody also matches ships whose owner's identity was deleted.</TextBlock>
                                     <TextBlock TextWrapping="Wrap" FontWeight="Bold" Margin="0,10,0,4">Safety:</TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,8">If any condition is unknown, is missing its parameter, or has a parameter that cannot be read, nothing is deleted and the reason is shown. A preset marked ⚠ is refused when run. Player distance only counts players who are alive in the world.</TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="10,0,0,8">If any condition is unknown, is missing its parameter, has a parameter that cannot be read, or names a player or block that does not exist, nothing is deleted and the reason is shown. A preset marked ⚠ is refused when run. Player distance only counts players who are alive in the world.</TextBlock>
                                     <TextBlock TextWrapping="Wrap" FontWeight="Bold" Margin="0,10,0,4">Apply To All:</TextBlock>
                                     <TextBlock TextWrapping="Wrap" Margin="10,0,0,8">Check this box if you do not need specific targets. When checked, the cleanup runs a single command using only the conditions. This is useful for broad cleanup rules like "delete all grids owned by nobody that are far from players".</TextBlock>
                                     <TextBlock TextWrapping="Wrap" FontWeight="Bold" Margin="0,10,0,4">Name patterns (Regex):</TextBlock>
@@ -1425,11 +1433,11 @@
                                         </StackPanel>
                                     </GroupBox>
 
-                                    <GroupBox Header="Example: Restricted Moderator" Margin="0,10,0,0" Padding="10">
+                                    <GroupBox Header="Example: Restricted Admin" Margin="0,10,0,0" Padding="10">
                                         <StackPanel>
-                                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">Goal: a player is a Moderator in-game, but should not use any cleanup commands.</TextBlock>
+                                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">Goal: a player is an Admin in-game, but should not use any cleanup commands.</TextBlock>
                                             <TextBlock TextWrapping="Wrap" Margin="10,0,0,3">Rule 1: cleanup — Deny</TextBlock>
-                                            <TextBlock TextWrapping="Wrap" Margin="0,10,0,4">Every other command keeps working as normal for their Moderator rank.</TextBlock>
+                                            <TextBlock TextWrapping="Wrap" Margin="0,10,0,4">Every other command keeps working as normal for their Admin rank.</TextBlock>
                                         </StackPanel>
                                     </GroupBox>
                                 </StackPanel>

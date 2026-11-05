@@ -2,6 +2,7 @@
 using System.Linq;
 using Sandbox.Game.Entities;
 using VRage.Game.ModAPI;
+using VRageMath;
 
 namespace SensEssentials;
 
@@ -15,7 +16,7 @@ public class GridFinder
     {
         var nodes = new List<MyCubeGrid>();
         MyCubeGridGroups.Static.GetGroups(linkType).GetGroupNodes(grid, nodes);
-        return nodes.Where(g => g.Physics != null && !g.MarkedForClose).ToList();
+        return [.. nodes.Where(g => g.Physics != null && !g.MarkedForClose)];
     }
 
     /// <summary>
@@ -24,6 +25,52 @@ public class GridFinder
     public static MyCubeGrid GetMainGrid(IReadOnlyList<MyCubeGrid> group)
     {
         return group.OrderByDescending(g => g.BlocksCount).First();
+    }
+
+    /// <summary>
+    /// Mechanical groups containing a grid with the given name or entity id.
+    /// </summary>
+    public static List<List<MyCubeGrid>> FindGroupsByName(string gridName)
+    {
+        return [.. GetAllGrids().Values.Where(group => group.Any(g => g.DisplayName == gridName || g.EntityId.ToString() == gridName))];
+    }
+
+    /// <summary>
+    /// The mechanical group the character is looking at (crosshair, or the free look direction), up to 5 km away.
+    /// Returns null when nothing is in sight.
+    /// </summary>
+    public static List<MyCubeGrid>? FindLookAtGroup(IMyCharacter character)
+    {
+        const float range = 5000;
+        MatrixD head = character.GetHeadMatrix(true, true, false);
+        var start = head.Translation + head.Forward * 0.5;
+        var end = head.Translation + head.Forward * (range + 0.5);
+        var ray = new RayD(start, head.Forward);
+
+        List<MyCubeGrid>? closest = null;
+        double closestDistance = double.MaxValue;
+        foreach (var group in GetAllGrids().Values)
+        {
+            foreach (IMyCubeGrid grid in group)
+            {
+                // Cheap box test first, then the block raycast.
+                if (!ray.Intersects(grid.WorldAABB).HasValue)
+                    continue;
+
+                var hit = grid.RayCastBlocks(start, end);
+                if (!hit.HasValue)
+                    continue;
+
+                double distance = (start - grid.GridIntegerToWorld(hit.Value)).Length();
+                if (distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    closest = group;
+                }
+            }
+        }
+
+        return closest;
     }
 
     /// <summary>

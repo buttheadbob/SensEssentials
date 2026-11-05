@@ -3,7 +3,7 @@
     <input class="@(SharedConfigValues.IsTime(Value) ? "" : "se-invalid")" value="@Value" @onchange="OnChange" placeholder="00:00:00" />
     @if (!SharedConfigValues.IsTime(Value))
     {
-        <span class="quasar-field-error">Use HH:MM:SS, for example 01:30:00.</span>
+        <span class="quasar-field-error">@TimeFormat.Help</span>
     }
     else if (Hint != null)
     {

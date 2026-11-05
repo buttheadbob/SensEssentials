@@ -61,8 +61,6 @@ public sealed class SharedConfigStore
         }
     }
 
-    public string FilePath => _path;
-
     /// <summary>Why the store file could not be read. While set, nothing is saved and servers are not synced.</summary>
     public string? LoadError { get; }
 
@@ -102,13 +100,18 @@ public sealed class SharedConfigStore
         return Copy(config);
     }
 
-    /// <summary>Saves new values and raises the revision, so every server following it gets them.</summary>
-    public SharedConfig Save(string id, SharedConfigValues values)
+    /// <summary>
+    /// Saves new values and raises the revision, so every server following it gets them. Refused when the config is no
+    /// longer at the revision the values were edited from, so two admins cannot overwrite each other unseen.
+    /// </summary>
+    public SharedConfig Save(string id, SharedConfigValues values, long expectedRevision)
     {
         SharedConfig? saved = null;
         Update(file =>
         {
             var config = file.Configs.FirstOrDefault(c => c.Id == id) ?? throw new InvalidOperationException("The shared config no longer exists.");
+            if (config.Revision != expectedRevision)
+                throw new InvalidOperationException("Someone else saved this config first. Check it, then save again.");
             config.Values = values.Clone();
             config.Revision++;
             config.UpdatedUtc = DateTimeOffset.UtcNow;
@@ -193,7 +196,7 @@ public sealed class SharedConfigStore
             return new StoreFile();
         var file = JsonSerializer.Deserialize<StoreFile>(File.ReadAllText(path), FileJson) ?? new StoreFile();
         file.Configs ??= [];
-        file.Servers = new Dictionary<string, ServerAssignment>(file.Servers ?? [], StringComparer.OrdinalIgnoreCase);
+        file.Servers = (file.Servers ?? []).Where(p => p.Value != null).ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
         foreach (var config in file.Configs)
             config.Values = SharedConfigValues.FromJson((config.Values ?? new SharedConfigValues()).ToJson());
         return file;
@@ -201,9 +204,22 @@ public sealed class SharedConfigStore
 
     private static void Write(string path, StoreFile file)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var directory = Path.GetDirectoryName(path)!;
+        Directory.CreateDirectory(directory);
         var temp = path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(file, FileJson));
+        using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write))
+        {
+            JsonSerializer.Serialize(stream, file, FileJson);
+            stream.Flush(flushToDisk: true);
+        }
+
+        // The file holds Discord webhook URLs, so only Quasar's own user may read it, as with Quasar's own configs.
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            File.SetUnixFileMode(temp, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+
         File.Move(temp, path, overwrite: true);
     }
 

@@ -44,8 +44,6 @@ public class EssentialsConfig : ObservableObject
 
     public int BackpackLimit { get; set => SetValue(ref field, value); } = 1;
 
-    public bool CutGameTags { get; set => SetValue(ref field, value); }
-
     // Discord Logging
 
     public bool DiscordLoggingEnabled { get; set => SetValue(ref field, value); }
@@ -53,7 +51,7 @@ public class EssentialsConfig : ObservableObject
     public ObservableCollection<DiscordLogHandler> DiscordLogHandlers { get; } = [];
 
     /// <summary>
-    /// Entries each webhook may post per second; the rest are dropped and counted. Discord allows about 5.
+    /// Entries each webhook may post per second; the rest are dropped and counted. Discord sets the real limit, and the plugin waits when told to.
     /// </summary>
     public int DiscordRateLimitPerSecond { get; set => SetValue(ref field, Math.Min(Math.Max(value, 1), 5)); } = 3;
 
@@ -104,9 +102,6 @@ public class EssentialsConfig : ObservableObject
                     item.PropertyChanged -= ItemChanged;
             OnPropertyChanged();
         };
-
-        foreach (var item in collection)
-            item.PropertyChanged += ItemChanged;
     }
 
     private void ItemChanged(object? sender, PropertyChangedEventArgs e) => OnPropertyChanged();

@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -36,7 +35,7 @@ public class CleanupPreset : ObservableObject
         if (ApplyToAll)
             return [BuildCommand(null)];
 
-        return Targets.Select(t => BuildCommand(t)).ToList();
+        return [.. Targets.Select(t => BuildCommand(t))];
     }
 
     internal string BuildCommand(CleanupTarget? target)
@@ -49,17 +48,14 @@ public class CleanupPreset : ObservableObject
         return sb.ToString();
     }
 
-    private static void AppendCondition(StringBuilder sb, CleanupConditionType type, string? param)
+    private static void AppendCondition(StringBuilder sb, ConditionType type, string? param)
     {
         sb.Append(' ');
         sb.Append(type.ToCommandString());
         if (!string.IsNullOrWhiteSpace(param))
         {
             sb.Append(' ');
-            if (type == CleanupConditionType.Name || param.Contains(' '))
-                sb.Append($"\"{param}\"");
-            else
-                sb.Append(param);
+            sb.Append(EssentialsCore.Host.QuoteArgument(param!));
         }
     }
 
@@ -94,9 +90,25 @@ public class CleanupPreset : ObservableObject
     protected override void OnPropertyChanged([CallerMemberName] string propName = "")
     {
         base.OnPropertyChanged(propName);
-        if (propName != nameof(Problem))
-            base.OnPropertyChanged(nameof(Problem));
+        if (propName is nameof(Problem) or nameof(Warning) or nameof(Attention))
+            return;
+        base.OnPropertyChanged(nameof(Problem));
+        base.OnPropertyChanged(nameof(Warning));
+        base.OnPropertyChanged(nameof(Attention));
     }
+
+    /// <summary>
+    /// Worth a second look, but it still runs.
+    /// </summary>
+    public string? Warning => Conditions.Any(c => ConditionNotes.IsOwnedByNobody(c.Condition.ToCommandString(), c.Parameter))
+        || (!ApplyToAll && Targets.Any(t => ConditionNotes.IsOwnedByNobody(t.Condition.ToCommandString(), t.Parameter)))
+        ? ConditionNotes.OwnedByNobody
+        : null;
+
+    /// <summary>
+    /// What the list marker shows: a problem first, then a warning.
+    /// </summary>
+    public string? Attention => Problem ?? Warning;
 
     private void WatchSubCollection<T>(ObservableCollection<T> collection) where T : ObservableObject
     {
@@ -110,9 +122,6 @@ public class CleanupPreset : ObservableObject
                     item.PropertyChanged -= SubItemChanged;
             OnPropertyChanged();
         };
-
-        foreach (var item in collection)
-            item.PropertyChanged += SubItemChanged;
     }
 
     private void SubItemChanged(object? sender, PropertyChangedEventArgs e) => OnPropertyChanged();
@@ -120,7 +129,7 @@ public class CleanupPreset : ObservableObject
 
 public class CleanupTarget : ObservableObject
 {
-    public CleanupConditionType Condition { get; set => SetValue(ref field, value); }
+    public ConditionType Condition { get; set => SetValue(ref field, value); }
 
     public string? Parameter { get; set => SetValue(ref field, value); }
 
@@ -128,11 +137,13 @@ public class CleanupTarget : ObservableObject
 
     public string Delay
     {
-        get => DelaySpan.ToString();
+        get => TimeFormat.Format(DelaySpan);
         set
         {
-            if (TimeSpan.TryParse(value, CultureInfo.InvariantCulture, out var span))
+            if (TimeFormat.TryParse(value, out var span))
                 SetValue(ref DelaySpan, span);
+            else
+                Log.Warn($"Cleanup target '{Parameter}' has an unreadable delay '{value}'. {TimeFormat.Help}");
         }
     }
 
@@ -141,7 +152,7 @@ public class CleanupTarget : ObservableObject
 
 public class CleanupCondition : ObservableObject
 {
-    public CleanupConditionType Condition { get; set => SetValue(ref field, value); }
+    public ConditionType Condition { get; set => SetValue(ref field, value); }
 
     public string? Parameter { get; set => SetValue(ref field, value); }
 

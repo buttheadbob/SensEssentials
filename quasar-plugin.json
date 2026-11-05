@@ -1,7 +1,7 @@
 {
   "id": "sensessentials.quasar",
   "displayName": "Sens Essentials",
-  "version": "1.0.0.5",
+  "version": "1.0.0.22",
   "entryAssembly": "SensEssentials.Quasar.dll",
   "entryType": "SensEssentials.Quasar.SensEssentialsQuasarPlugin",
   "projectPath": "QuasarPlugin/SensEssentials.Quasar/SensEssentials.Quasar.csproj",

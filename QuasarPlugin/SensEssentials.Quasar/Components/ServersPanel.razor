@@ -54,8 +54,8 @@
                                     }
                                 </td>
                                 <td>
-                                    <select value="@(config?.Id ?? "")" aria-label="@($"Shared config for {server.DisplayName}")"
-                                            @onchange="e => Assign(server, e.Value?.ToString())">
+                                    <select @key="@($"{server.ServerId}:{_selectVersion}")" value="@(config?.Id ?? "")" aria-label="@($"Shared config for {server.DisplayName}")"
+                                            @onchange="e => Ask(server, e.Value?.ToString())">
                                         <option value="">Configured on its own</option>
                                         @foreach (var option in configs)
                                         {
@@ -73,11 +73,42 @@
     </div>
 </section>
 
+@if (_pendingServer != null)
+{
+    var name = _pendingServer.DisplayName;
+    <div class="se-modal-backdrop">
+        <div class="se-modal" role="dialog" aria-modal="true" aria-labelledby="se-confirm-title">
+            @if (_pendingConfig != null)
+            {
+                <h3 id="se-confirm-title">Replace the settings of @name?</h3>
+                <p>@name takes every Sens Essentials setting from "@_pendingConfig.Name" (revision @_pendingConfig.Revision) right away.
+                    Its own auto commands, presets and Discord handlers are replaced, and this cannot be undone.</p>
+                <p>Unsaved edits on this page are not included.</p>
+            }
+            else
+            {
+                <h3 id="se-confirm-title">Stop following the shared config?</h3>
+                <p>@name keeps the settings it has now, and can be edited by itself on its Plugins page.</p>
+            }
+            <div class="se-modal-actions">
+                <button type="button" class="quasar-button" @onclick="Cancel">Cancel</button>
+                <button type="button" class="quasar-button quasar-button-primary" @onclick="Accept">@(_pendingConfig != null ? "Replace settings" : "Stop following")</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     /// <summary>The config being edited, whose servers are highlighted. Null for the overview.</summary>
     [Parameter] public SharedConfig? Highlight { get; set; }
 
+    /// <summary>Called after a server is assigned, so its result can be followed.</summary>
+    [Parameter] public Action<ServerState, SharedConfig?>? Assigned { get; set; }
+
     private string? _error;
+    private ServerState? _pendingServer;
+    private SharedConfig? _pendingConfig;
+    private int _selectVersion;
 
     protected override void OnInitialized()
     {
@@ -93,17 +124,37 @@
 
     private void OnChanged() => _ = InvokeAsync(StateHasChanged);
 
-    private void Assign(ServerState server, string? configId)
+    private void Ask(ServerState server, string? configId)
     {
+        _pendingServer = server;
+        _pendingConfig = string.IsNullOrEmpty(configId) ? null : Store.GetConfigs().FirstOrDefault(c => c.Id == configId);
+    }
+
+    private void Accept()
+    {
+        var server = _pendingServer!;
+        var config = _pendingConfig;
+        _pendingServer = null;
+        _pendingConfig = null;
         try
         {
             _error = null;
-            Store.Assign(server.ServerId, server.DisplayName, string.IsNullOrEmpty(configId) ? null : configId);
+            Store.Assign(server.ServerId, server.DisplayName, config?.Id);
+            Assigned?.Invoke(server, config);
         }
         catch (Exception e)
         {
             _error = e.Message;
+            _selectVersion++;
         }
+    }
+
+    // The list already shows the choice, so it is rebuilt to show the real one again.
+    private void Cancel()
+    {
+        _pendingServer = null;
+        _pendingConfig = null;
+        _selectVersion++;
     }
 
     private static (string Text, string Tone) Describe(ServerState server, SharedConfig? config)
@@ -111,7 +162,7 @@
         if (!server.Online)
             return (config == null ? "Offline" : "Offline. Gets the config when it connects.", "se-muted");
         if (server.Error != null)
-            return ($"Could not reach the Sens Essentials companion: {server.Error} Restart the server if it was started before this plugin was enabled.", "quasar-text-error");
+            return ($"The server did not take the change: {server.Error} Restart the server if it was started before this plugin was enabled.", "quasar-text-error");
         if (server.Status == null)
             return ("Checking...", "se-muted");
         if (!server.Status.Installed)
