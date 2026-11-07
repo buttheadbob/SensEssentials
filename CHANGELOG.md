@@ -20,6 +20,8 @@ Compared with Essentials 1.5.1 (https://github.com/Bishbash777/Essentials, last 
 * Block Presets: named block actions, run with !admin runpreset or as an auto command step.
 * !blocks on, off and remove accept cleanup conditions to limit which grids are affected. New !blocks count.
 * Command Permissions: allow or deny single commands for single players, without changing their rank.
+* Public balances setting: turn it off so only Admins can see other players' balances with !economy top and !economy
+  check. On by default.
 * Sim speed triggers have their own tab and run only when sim speed stays past the ratio for the whole Duration, with a
   Cooldown and optional Hysteresis. Essentials checked again once after TriggerCount seconds, with no cooldown.
 * !entities poweroff and poweron: optional includeConnectorDocked.

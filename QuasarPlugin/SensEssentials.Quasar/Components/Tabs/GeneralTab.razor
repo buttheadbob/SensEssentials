@@ -11,6 +11,9 @@
             <label class="quasar-check" title="Show users the position of all grids they own by GPS marker.">
                 <input type="checkbox" @bind="Values.MarkerShowPosition" /> Grid list GPS marker
             </label>
+            <label class="quasar-check" title="Players can see each other's balances with !economy top and !economy check. When off, only Admins can.">
+                <input type="checkbox" @bind="Values.PublicBalances" /> Public balances
+            </label>
             <label class="quasar-field se-narrow">
                 Backpack limit
                 <input type="number" min="-1" max="1000" @bind="Values.BackpackLimit" />

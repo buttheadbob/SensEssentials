@@ -39,6 +39,9 @@ public class MagnetarConfig : PluginConfig
     [IntOption(-1, 1000, "Backpacks each player may have in the world, counted per player; empty ones and the oldest over the limit, even with items in them, are deleted after 30 seconds. -1 for no limit", Parent = "general")]
     public int BackpackLimit { get; set => SetField(ref field, value); } = 1;
 
+    [BoolOption("Players can see each other's balances with !economy top and !economy check. When off, only Admins can", Parent = "general")]
+    public bool PublicBalances { get; set => SetField(ref field, value); } = true;
+
     // MOTD
 
     [StringOption(description: "Shown to every player when they spawn. %player% is replaced with their name", Parent = "motd", Multiline = true)]
@@ -127,6 +130,7 @@ public class MagnetarConfig : PluginConfig
         c.UtilityShowPosition = UtilityShowPosition;
         c.MarkerShowPosition = MarkerShowPosition;
         c.BackpackLimit = BackpackLimit;
+        c.PublicBalances = PublicBalances;
 
         c.Motd = Motd;
         c.NewUserMotd = NewUserMotd;

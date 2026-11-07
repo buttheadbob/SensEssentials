@@ -42,5 +42,5 @@ enabled. Cluster nodes are not managed, a cluster's plugins are configured throu
         <CompanionPluginId>sensessentials.quasar</CompanionPluginId>
     </CompanionPluginIds>
 
-    <Commit>35e47c8bf941b874a7ad0ff441814e9699dbec25</Commit>
+    <Commit>20765c461dc6869332840859a3a149c0f71062e8</Commit>
 </PluginData>

@@ -21,7 +21,7 @@ Sens Essentials is a collection of utilities and administration tools for Space 
   count or sim speed limit.
 - Cleanup and Block Presets: delete grids or switch blocks by conditions.
 - MOTD, and Info Commands players run with !info &lt;name&gt;.
-- Discord Logging: post plugin logs to webhooks. Off by default.
+- Discord Logging: post all server plugin logs to webhooks. Off by default.
 - Suit Refill, and commands for grids, entities, teleporting, economy, voting, voxels, factions and identities.
 
 On by default, under General: each player keeps 1 backpack, so older ones are deleted even with items in them
@@ -37,5 +37,5 @@ Also available as a Torch plugin.
         <Directory>Versioning</Directory>
     </SourceDirectories>
 
-    <Commit>35e47c8bf941b874a7ad0ff441814e9699dbec25</Commit>
+    <Commit>20765c461dc6869332840859a3a149c0f71062e8</Commit>
 </PluginData>

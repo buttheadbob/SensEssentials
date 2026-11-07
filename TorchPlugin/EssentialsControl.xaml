@@ -169,6 +169,7 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Stop entities on start" ToolTip="Stop all entities in the world when the server starts." Margin="5" VerticalAlignment="Center"/>
@@ -182,6 +183,9 @@
 
                                 <TextBlock Grid.Row="3" Grid.Column="0" Text="Backpack limit" ToolTip="Number of backpacks per player, counted separately for each player. Empty backpacks and the oldest over the limit, even with items in them, are deleted after 30s. Set -1 for no limit." Margin="5" VerticalAlignment="Center"/>
                                 <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding BackpackLimit, UpdateSourceTrigger=PropertyChanged}" Width="80" HorizontalAlignment="Left" Margin="5"/>
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Public balances" ToolTip="Players can see each other's balances with !economy top and !economy check. When off, only Admins can." Margin="5" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Row="4" Grid.Column="1" IsChecked="{Binding PublicBalances}" Margin="5" VerticalAlignment="Center"/>
 
                             </Grid>
                         </GroupBox>

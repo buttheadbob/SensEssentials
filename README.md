@@ -119,6 +119,8 @@ NPCs are skipped unless `includeNpcs` is true. Online players are never touched 
 - **Backpack limit**: backpacks (dropped inventories) each player may have, 1 by default, counted per player and
   including bags saved with the world. -1 for no limit. Empty backpacks are deleted after 30 seconds, and so are the
   oldest ones over the limit, even with items in them.
+- **Public balances**: on by default, so any player can see other balances with `!economy top` and `!economy check`. Off,
+  only Admins can, and players can still check their own.
 
 ### MOTD
 - **MOTD**: shown to every player when they spawn. `%player%` is replaced with their name. `!motd` shows it again.

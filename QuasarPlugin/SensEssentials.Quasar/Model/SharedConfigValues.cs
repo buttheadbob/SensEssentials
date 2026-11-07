@@ -13,6 +13,7 @@ public sealed class SharedConfigValues
     public bool UtilityShowPosition { get; set; }
     public bool MarkerShowPosition { get; set; }
     public int BackpackLimit { get; set; } = 1;
+    public bool PublicBalances { get; set; } = true;
 
     // MOTD
     public string Motd { get; set; } = "";

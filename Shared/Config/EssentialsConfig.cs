@@ -44,6 +44,11 @@ public class EssentialsConfig : ObservableObject
 
     public int BackpackLimit { get; set => SetValue(ref field, value); } = 1;
 
+    /// <summary>
+    /// When off, only Admins can see other players' balances, with !economy top or !economy check.
+    /// </summary>
+    public bool PublicBalances { get; set => SetValue(ref field, value); } = true;
+
     // Discord Logging
 
     public bool DiscordLoggingEnabled { get; set => SetValue(ref field, value); }

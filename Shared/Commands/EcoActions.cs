@@ -105,7 +105,23 @@ public sealed class EcoActions(ICommandContext context) : CommandActions(context
         EcoSet(player, MyBankingSystem.BankingSystemDefinition?.StartingBalance ?? 10_000, onlyOnline, excludeNpcs);
     }
 
+    /// <summary>
+    /// False for a player below Admin when the server keeps balances private. The reply is sent here.
+    /// </summary>
+    private bool CanSeeOtherBalances() {
+
+        if (EssentialsCore.Config.PublicBalances || Context.Player == null
+            || MySession.Static.GetUserPromoteLevel(Context.Player.SteamUserId) >= MyPromoteLevel.Admin)
+            return true;
+
+        Context.Respond("Balances are private on this server. You can check your own with !economy check <your name>.");
+        return false;
+    }
+
     public void EcoTop(bool onlyOnline = false, bool excludeNpcs = true) {
+
+        if (!CanSeeOtherBalances())
+            return;
 
         TryFindPlayerIdentities("*", onlyOnline, excludeNpcs, out List<long> foundIdentities);
 
@@ -143,6 +159,9 @@ public sealed class EcoActions(ICommandContext context) : CommandActions(context
             Context.Respond("Player cannot be found!");
             return;
         }
+
+        if (p.IdentityId != Context.Player?.IdentityId && !CanSeeOtherBalances())
+            return;
 
         long balance = MyBankingSystem.GetBalance(p.IdentityId);
 
