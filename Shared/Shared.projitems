@@ -40,6 +40,8 @@
     <Compile Include="$(MSBuildThisFileDirectory)Core\EssentialsCore.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core\EssentialsSession.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core\GameThread.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Core\CommandSequence.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Core\WorldSession.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core\ObservableObject.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Discord\DiscordLogging.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Discord\DiscordWebhook.cs" />

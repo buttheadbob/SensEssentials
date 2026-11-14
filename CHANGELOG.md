@@ -106,6 +106,10 @@ Compared with Essentials 1.5.1 (https://github.com/Bishbash777/Essentials, last 
 * The default toolbar for new players (!admin set toolbar).
 
 ## Fixed
+* Auto command and preset steps waiting for the game thread no longer run after the auto command is cancelled, after
+  the server stops, or in a world loaded after the one they started in. Presets still running stop when the world
+  unloads.
+* A step's delay counts from when its command ran. A busy server could run several steps at once before.
 * Errors in game-thread callbacks, event handlers and session changes are logged instead of crashing the server.
 * !grids export and import accepted names that could point outside ExportedGrids.
 * !econ give, take and set accepted negative amounts. Balances can no longer pass the largest possible value, which
