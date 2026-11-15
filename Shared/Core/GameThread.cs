@@ -1,5 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using Sandbox;
 using Sandbox.Game;
 using Sandbox.Game.World;
@@ -25,6 +27,29 @@ public static class GameThread
                 Log.Error(e, $"Error in game thread action from {caller}");
             }
         }, caller);
+    }
+
+    /// <summary>
+    /// Runs an action on the game thread, and finishes once it has run, or when the token is cancelled first.
+    /// </summary>
+    public static Task InvokeAsync(Action action, CancellationToken token = default, [CallerMemberName] string caller = "")
+    {
+        // Continuations run off the game thread, so a caller awaiting this never delays the game.
+        var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancel = token.Register(() => done.TrySetCanceled());
+        InvokeSafe(() =>
+        {
+            try
+            {
+                action();
+            }
+            finally
+            {
+                cancel.Dispose();
+                done.TrySetResult(true);
+            }
+        }, caller);
+        return done.Task;
     }
 }
 

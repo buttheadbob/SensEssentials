@@ -5,7 +5,6 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Xml.Serialization;
 
 namespace SensEssentials;
@@ -262,6 +261,7 @@ public class AutoCommand : ObservableObject
 
             var step = steps[_currentStep];
 
+            // This runs on the game thread, so the step runs now and its delay counts from when it finished.
             step.RunStep(_name);
             _currentStep++;
             // Once the last step has run, the Interval or the schedule takes over from its delay.
@@ -298,6 +298,9 @@ public class AutoCommand : ObservableObject
             set => SetValue(ref _command, value);
         }
 
+        /// <summary>
+        /// Runs the command now. Only call this on the game thread.
+        /// </summary>
         public void RunStep(string owner)
         {
             if (!EssentialsCore.Host.IsServerRunning)
@@ -306,8 +309,7 @@ public class AutoCommand : ObservableObject
             if (string.IsNullOrEmpty(Command))
                 return;
 
-            var command = Command;
-            GameThread.InvokeSafe(() => EssentialsCore.RunCommand(command, $"Auto command '{owner}'"));
+            EssentialsCore.RunCommand(Command, $"Auto command '{owner}'");
         }
 
         public override string ToString()
@@ -338,20 +340,11 @@ public class AutoCommand : ObservableObject
 
         try
         {
-            var steps = Steps.ToList();
-            await Task.Run(() =>
-            {
-                foreach (var step in steps)
-                {
-                    if (cts.IsCancellationRequested)
-                        break;
-
-                    step.RunStep(_name);
-
-                    // Wakes up early when cancelled.
-                    cts.Token.WaitHandle.WaitOne(step.DelaySpan);
-                }
-            });
+            var steps = Steps.Select(step => (step.Command, step.DelaySpan)).ToList();
+            await CommandSequence.Run(steps, $"Auto command '{_name}'", cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch (Exception e)
         {

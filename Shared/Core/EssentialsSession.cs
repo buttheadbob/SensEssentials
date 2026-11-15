@@ -30,6 +30,7 @@ public static class EssentialsSession
     /// </summary>
     public static void Loaded()
     {
+        WorldSession.Next();
         Run(() =>
         {
             _multiplayer = MyMultiplayer.Static;
@@ -56,6 +57,9 @@ public static class EssentialsSession
     /// </summary>
     public static void Unloading()
     {
+        // First, so nothing still queued for this world runs while it unloads.
+        WorldSession.Next();
+        Run(CommandSequence.CancelPresets, "cancel running presets");
         Run(() =>
         {
             if (_multiplayer != null)

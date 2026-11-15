@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using Sandbox;
 using Sandbox.Engine.Multiplayer;
 using Sandbox.Game.World;
@@ -101,31 +100,9 @@ public sealed class AdminActions(ICommandContext context) : CommandActions(conte
         var items = preset.Items.ToList();
         Context.Respond($"Running block preset '{name}' ({items.Count} items)...");
 
-        RunInOrder($"Block preset '{name}'", [.. items
+        CommandSequence.Start($"Block preset '{name}'", [.. items
             .Where(item => !string.IsNullOrWhiteSpace(item.Value))
             .Select(item => (preset.GetCommand(action, item), item.DelaySpan))]);
-    }
-
-    /// <summary>
-    /// Runs commands one at a time on the game thread, waiting in the background in between.
-    /// </summary>
-    private static void RunInOrder(string source, List<(string Command, TimeSpan Delay)> steps)
-    {
-        Task.Run(async () =>
-        {
-            try
-            {
-                foreach (var (command, delay) in steps)
-                {
-                    GameThread.InvokeSafe(() => EssentialsCore.RunCommand(command, source));
-                    await Task.Delay(delay);
-                }
-            }
-            catch (Exception e)
-            {
-                Log.Error(e, $"{source} failed");
-            }
-        });
     }
 
     public void RunCleanup(string name)
@@ -154,7 +131,7 @@ public sealed class AdminActions(ICommandContext context) : CommandActions(conte
         {
             var targets = preset.Targets.ToList();
             Context.Respond($"Running cleanup preset '{name}' ({targets.Count} targets)...");
-            RunInOrder($"Cleanup preset '{name}'", [.. targets.Select(target => (preset.BuildCommand(target), target.DelaySpan))]);
+            CommandSequence.Start($"Cleanup preset '{name}'", [.. targets.Select(target => (preset.BuildCommand(target), target.DelaySpan))]);
         }
     }
 
