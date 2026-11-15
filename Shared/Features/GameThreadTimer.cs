@@ -31,7 +31,7 @@ public abstract class GameThreadTimer(string name) : IDisposable
         _timer = null;
     }
 
-    public void Dispose() => Stop();
+    public virtual void Dispose() => Stop();
 
     protected abstract void Tick();
 
