@@ -108,9 +108,9 @@ public class SimSpeedEvents() : GameThreadTimer("sim speed events")
         };
     }
 
-    public void Dispose()
+    public override void Dispose()
     {
-        Stop();
+        base.Dispose();
         _states.Clear();
     }
 }
